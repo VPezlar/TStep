@@ -1,0 +1,8 @@
+&Setup
+output_file           = '../output/flowfield.csv',
+flow_format           = 'OpenFOAM',
+N_HEADER_grid         = 21,
+N_HEADER_var          = 21,
+file_grid             = '/Users/vojtechpezlar/Dropbox/PhD/Development/OpenFOAM/TMCone/ConeCase/OpenFOAM/TestRun/0/C',
+file_var              = '/Users/vojtechpezlar/Dropbox/PhD/Development/OpenFOAM/TMCone/ConeCase/OpenFOAM/TestRun/9.98898e-08/',
+/
