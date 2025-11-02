@@ -13,24 +13,24 @@ FC := gfortran
 FFLAGS := -O3 -J$(MODDIR) -c -fcheck=all -Warray-bounds -ffree-form -Wall -Wno-tabs #-fno-backtrace
 
 OBJECTS = accuracy.o \
-          variables.o \
-          setup.o \
-          OpenFOAM_IO.o \
-          read_flow.o \
-          write_output.o \
-          call_CFD.o \
-          main.o
+	  variables.o \
+	  setup.o \
+	  OpenFOAM_IO.o \
+	  read_flow.o \
+	  write_output.o \
+	  call_CFD.o \
+	  main.o
 
 # Compilation rule
 $(OBJDIR)/%.o : $(SRCDIR)/%.f90
-        $(FC) $(FFLAGS) $< -o $@
+	$(FC) $(FFLAGS) $< -o $@
 
 OBJPROG = $(addprefix $(OBJDIR)/, $(OBJECTS))
 
 all : $(BINDIR)/$(EXECUT)
 
 $(BINDIR)/$(EXECUT): $(OBJPROG)
-        $(FC) $^ $(LIBHDF5) $(LIBBLAS) -o $@
+	$(FC) $^ $(LIBHDF5) $(LIBBLAS) -o $@
 
 clean:
-        rm -f $(OBJDIR)/*.o $(MODDIR)/*.mod $(BINDIR)/$(EXECUT) ./fort.*
+	rm -f $(OBJDIR)/*.o $(MODDIR)/*.mod $(BINDIR)/$(EXECUT) ./fort.*
