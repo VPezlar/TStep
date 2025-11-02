@@ -50,28 +50,24 @@ PROGRAM main
         STOP ERR_MAIN_DISTURBANCE
     END IF
 
-    ! Get a free file unit
+    ! --- TEMPORARY: Write disturbance vector to file for testing ---
+    ! TODO: Remove this section after validation is complete
     CALL get_unit(unit_num)
-
     OPEN(UNIT=unit_num, FILE='disturbance.txt', STATUS='REPLACE', ACTION='WRITE', IOSTAT=error_status)
     IF (error_status /= 0) THEN
-        WRITE(*,*) 'FATAL: Failed to open disturbance.txt for writing (IOSTAT:', error_status, ')'
-        ! Handle error gracefully if needed
-        STOP 90
+        WRITE(*,*) 'WARNING: Failed to open disturbance.txt for writing (IOSTAT:', error_status, ')'
+        WRITE(*,*) 'Continuing without writing disturbance file...'
+    ELSE
+        ! Write vector size first (helpful for later reading)
+        WRITE(unit_num, *) SIZE(pert_0)
+        ! Write all elements of the vector, one per line
+        DO i = 1, data_count
+            WRITE(unit_num, *) pert_0(i)
+        END DO
+        CLOSE(unit_num)
+        WRITE(*,*) 'SUCCESS: Wrote disturbance vector to disturbance.txt.'
     END IF
-
-    ! Write the size of the vector first (optional, but often helpful for later reading)
-    WRITE(unit_num, *) SIZE(pert_0)
-
-    ! Write all elements of the vector, one per line (A simple, easy-to-read format)
-    DO i = 1, data_count
-        WRITE(unit_num, *) pert_0(i)
-    END DO
-
-    CLOSE(unit_num)
-
-    WRITE(*,*) 'SUCCESS: Wrote disturbance vector to disturbance.txt.'
-    ! --- End Write Disturbance Section ---
+    ! --- End TEMPORARY section ---
 
 
 

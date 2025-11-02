@@ -1,21 +1,55 @@
-# TStep - OpenFOAM Flow Field Data Converter
+# TStep - Time-Stepping Framework for CFD Solvers
 
-A Fortran application for reading OpenFOAM flow field data and exporting it to CSV format for post-processing and analysis. The application can also execute external CFD simulations before processing the data.
+> ⚠️ **Active Development**: This project is under continuous development. Features are being incrementally added and tested.
 
-## Overview
+A Fortran-based time-stepping framework designed for general CFD solver integration. TStep is being developed as a flexible tool that can interface with various CFD solvers to perform time-accurate simulations, sensitivity analysis, and data processing.
 
-TStep reads OpenFOAM flow field data files (pressure, density, temperature, velocity, and grid coordinates) and exports them as a structured CSV file. The program is designed to work with OpenFOAM cell center data in the standard OpenFOAM file format.
+## Development Status
 
-## Features
+**Current Phase**: Foundation and Testing with OpenFOAM  
+**Target**: General-purpose time-stepping framework compatible with multiple CFD solvers
 
-- **External command execution**: Run CFD simulations (e.g., OpenFOAM solvers) directly from the application
+TStep is currently being developed and validated using OpenFOAM as the primary test case, but the architecture is designed to be **solver-agnostic**. The modular structure allows for easy adaptation to other CFD solvers (e.g., SU2, CFL3D, FUN3D, or custom solvers).
+
+## Architecture Overview
+
+TStep is built on a **modular, solver-agnostic architecture**:
+
+1. **Solver Interface Layer**: Execute external CFD solvers and manage data exchange
+2. **I/O Abstraction**: Read/write flow field data in various formats (currently OpenFOAM, extensible to others)
+3. **Data Processing**: Manipulate flow fields (perturbations, filtering, etc.)
+4. **Time-Stepping Core**: Control simulation advancement (under development)
+5. **Configuration Management**: Flexible input system for different workflows
+
+### Current Implementation: OpenFOAM Focus
+
+While TStep is designed for general CFD solver compatibility, the current implementation focuses on OpenFOAM for validation and testing. The OpenFOAM-specific components are isolated in dedicated modules (`OpenFOAM_IO`) to facilitate future expansion to other solvers.
+
+## Vision & Goals
+
+**Ultimate Goal**: A general-purpose time-stepping framework that can:
+- Interface with any CFD solver via external commands or API calls
+- Support parallel execution and HPC environments
+
+## Current Features
+
+### ✅ Implemented
+- **External command execution**: Run CFD simulations (OpenFOAM, or any solver) via shell commands
 - **Random disturbance generation**: Create normalized, scaled random perturbation vectors for sensitivity analysis
-- Reads OpenFOAM scalar fields (pressure, density, temperature)
-- Reads OpenFOAM vector fields (velocity components U, V, W)
-- Reads grid cell center coordinates (X, Y, Z)
-- Exports all data to a single CSV file
-- Configurable via namelist input file
-- Robust error handling and memory management with comprehensive error codes
+- **OpenFOAM I/O**: Read scalar fields (pressure, density, temperature) and vector fields (velocity, coordinates)
+- **Data export**: Write processed data to CSV format
+- **Flexible configuration**: Namelist-based input system
+- **Robust error handling**: Centralized hierarchical error management system
+- **Modular architecture**: Easy to extend for other solvers
+
+### 🚧 In Development
+- Solver abstraction layer for generic CFD integration
+- Additional solver interfaces (SU2, custom solvers)
+- Advanced perturbation methods
+- Parallel execution support
+
+### 📋 Planned
+- Real-time monitoring and diagnostics
 
 ## Project Structure
 
@@ -24,6 +58,7 @@ TStep/
 ├── src/              # Source files
 │   ├── main.f90              # Main program
 │   ├── accuracy.f90          # Precision definitions
+│   ├── error_handling.f90    # Centralized error code management
 │   ├── variables.f90         # Global variables
 │   ├── setup.f90             # Configuration reading
 │   ├── call_CFD.f90          # External command execution
@@ -45,26 +80,36 @@ The project uses Fortran 90/95 with the following module dependencies:
 ```
 main.f90
   ├─ accuracy
+  ├─ error_handling
+  │   └─ accuracy
   ├─ setup
+  │   ├─ accuracy
+  │   ├─ variables
+  │   └─ error_handling
   ├─ call_CFD
+  │   └─ error_handling
   ├─ random_disturbance
   │   ├─ accuracy
   │   ├─ variables
-  │   └─ setup
+  │   ├─ setup
+  │   └─ error_handling
   ├─ read_flow
   │   ├─ accuracy
   │   ├─ variables
   │   ├─ setup
-  │   └─ OpenFOAM_IO
+  │   ├─ OpenFOAM_IO
+  │   └─ error_handling
   └─ write_output
       ├─ accuracy
       ├─ variables
-      └─ setup
+      ├─ setup
+      └─ error_handling
 ```
 
 Compilation example (using gfortran):
 ```bash
 gfortran -c src/accuracy.f90 -o obj/accuracy.o -J mod/
+gfortran -c src/error_handling.f90 -o obj/error_handling.o -J mod/
 gfortran -c src/variables.f90 -o obj/variables.o -J mod/
 gfortran -c src/setup.f90 -o obj/setup.o -J mod/
 gfortran -c src/call_CFD.f90 -o obj/call_CFD.o -J mod/
@@ -75,6 +120,24 @@ gfortran -c src/write_output.f90 -o obj/write_output.o -J mod/
 gfortran -c src/main.f90 -o obj/main.o -J mod/
 gfortran obj/*.o -o bin/TStep
 ```
+
+## Solver Compatibility
+
+### Current: OpenFOAM
+Fully supported for development and testing. Reads standard OpenFOAM file formats:
+- Scalar fields: `p`, `rho`, `T`
+- Vector fields: `U`, cell coordinates `C`
+
+### Future: Generic Solver Support
+The modular design allows for easy extension to other solvers:
+- **File-based solvers**: Any solver that writes field data to files (Tecplot, CGNS, HDF5, etc.)
+- **API-based solvers**: Direct in-memory coupling with solver libraries
+- **Custom formats**: Add new I/O modules following the existing patterns
+
+**Adding a new solver** requires:
+1. Implement solver-specific I/O module (similar to `OpenFOAM_IO.f90`)
+2. Add format option to configuration
+3. Update `read_flow.f90` with new format case
 
 ## Configuration
 
@@ -98,7 +161,7 @@ file_var            = '/path/to/openfoam/case/timestep/',
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `output_file` | string | Path to output CSV file |
-| `flow_format` | string | Flow solver format (e.g., 'OpenFOAM') |
+| `flow_format` | string | Flow solver format ('OpenFOAM', extensible to 'SU2', 'CGNS', etc.) |
 | `COMMAND_RUN` | string | External command to execute CFD simulation |
 | `dist_mag` | real | Magnitude for random disturbance vector scaling |
 | `N_HEADER_grid` | integer | Number of header lines in grid coordinate file |
@@ -156,6 +219,48 @@ Where:
    ```
 3. The output CSV file will be created at the location specified in the configuration
 
+## Error Handling System
+
+TStep implements a **centralized hierarchical error handling system** where each module owns a unique range of error codes.
+
+### Error Code Structure
+
+```
+ERROR_CODE = MODULE_ID × 100 + SPECIFIC_ERROR
+```
+
+### Module Error Code Ranges
+
+| Range   | Module                  | Example Errors                     |
+|---------|-------------------------|---------------------------------|
+| 1-99    | Main Program            | Configuration, flow read, output write failures |
+| 100-199 | Setup/Configuration     | File open, namelist parse errors  |
+| 200-299 | OpenFOAM I/O (Scalars)  | Scalar file read, allocation errors |
+| 300-399 | OpenFOAM I/O (Vectors)  | Vector file read, format errors   |
+| 400-499 | Flow Reading            | Pressure, density, temperature, velocity read failures |
+| 500-599 | Output Writing          | Output file open, write errors    |
+| 600-699 | External Commands       | Command launch, execution failures |
+| 700-799 | Random Disturbance      | Invalid length, allocation, normalization errors |
+
+### Benefits
+
+1. **Unique identification**: Each error code immediately identifies its source module
+2. **Structured logging**: Unified `log_error()` function provides consistent error output
+3. **Scalability**: Each module has 100 error codes (room for growth)
+4. **Debugging**: Exit codes directly trace back to failure source
+5. **Maintainability**: All error codes centrally defined in `error_handling` module
+
+### Example Error Output
+
+```
+=========================================
+ERROR CODE: 201
+MODULE:     OPENFOAM_IO_SCALAR
+DESCRIPTION: Cannot open scalar file
+DETAILS:    File: /path/to/file/p
+=========================================
+```
+
 ## Modules
 
 ### call_CFD
@@ -201,6 +306,19 @@ Random perturbation generation module for sensitivity analysis:
 - `1`: Invalid vector length (≤ 0)
 - `2`: Memory allocation failed
 - `3`: Zero or near-zero norm (cannot normalize)
+
+### error_handling
+Centralized error code management module providing:
+- **Named error constants**: All error codes defined with descriptive names (e.g., `ERR_SCALAR_OPEN = 201`)
+- **`log_error(error_code, [additional_info])`**: Unified error logging with structured output
+- **`get_module_name(error_code)`**: Returns module name from error code
+- **`get_error_description(error_code)`**: Returns human-readable error description
+
+#### Key Features:
+- Hierarchical error code system (MODULE_ID × 100 + ERROR_NUM)
+- No error code conflicts between modules
+- Optional additional context in error messages
+- Easy to extend with new modules and error types
 
 ### accuracy
 Defines precision for integer and real variables using ISO Fortran intrinsic types:
@@ -281,23 +399,40 @@ Main program that:
 
 ## Error Handling
 
-The program uses a comprehensive error handling strategy:
+The program uses a **centralized hierarchical error handling system**:
 
 ### Principles:
+- **Centralized definitions**: All error codes defined in `error_handling` module
+- **Hierarchical structure**: Error codes organized by module (100 codes per module)
 - **Consistent status codes**: All subroutines use `error_status`/`ierr` output parameters
-- **Early returns**: Functions return immediately on error with descriptive messages
-- **Defensive allocation**: All allocations checked before use; deallocations check `ALLOCATED()` status
+- **Structured logging**: Unified `log_error()` provides formatted error messages
+- **Early returns**: Functions return immediately on error
+- **Defensive programming**: All allocations checked; deallocations protected by `ALLOCATED()`
 - **Comprehensive validation**: Input parameters validated before processing
 - **Clean error paths**: Memory properly deallocated on all error conditions
-- **Meaningful exit codes**: Main program exits with specific codes for each failure type
+- **Meaningful exit codes**: Main program exits with specific module-based error codes
 
 ### Error Code Ranges:
-- **Main program**: 0 (success), 1-3 (specific failures)
-- **Configuration**: 0 (success), 1-2 (file/parse errors)
-- **OpenFOAM scalars**: 0 (success), 1-7 (detailed I/O errors)
-- **OpenFOAM vectors**: 0 (success), 11-18 (detailed I/O errors)
-- **External commands**: 0 (success), 1-2 (launch/execution errors)
-- **Random disturbance**: 0 (success), 1-3 (validation/allocation/normalization errors)
+- **Main program (1-99)**: Configuration (1), external command (2), flow read (3), disturbance (4), output write (5)
+- **Setup (100-199)**: File open (101), namelist read (102), invalid param (103)
+- **OpenFOAM scalars (200-299)**: File operations (201-207)
+- **OpenFOAM vectors (300-399)**: File operations (301-308)
+- **Flow reading (400-499)**: Pressure (401), density (402), temperature (403), velocity (404), grid (405)
+- **Output writing (500-599)**: File open (501), header write (502), data write (503)
+- **External commands (600-699)**: Launch failed (601), non-zero exit (602)
+- **Random disturbance (700-799)**: Invalid length (701), allocation (702), zero norm (703)
+
+### Usage Example:
+
+```fortran
+USE error_handling
+
+CALL some_operation(data, error_status)
+IF (error_status /= 0) THEN
+    CALL log_error(ERR_MODULE_SPECIFIC, 'Additional context here')
+    STOP error_status
+END IF
+```
 
 ## Memory Management
 
@@ -312,33 +447,92 @@ The application follows best practices for memory management:
 
 ## Requirements
 
+### Software
 - Fortran 90/95 compiler (e.g., gfortran, ifort)
-- OpenFOAM case data with standard file format
+- CFD solver (currently tested with OpenFOAM)
+- POSIX-compliant shell (for external command execution)
+
+### System
 - Sufficient memory for flow field data (all data loaded into memory)
+- File system access for input/output operations
 
-## Limitations
+### Optional (for development)
+- HPC environment (for cluster testing on Zeus)
+- Version control (git recommended)
 
+## Current Limitations
+
+### Technical
 - All data must fit in memory (no streaming)
-- Fixed CSV output format
-- Assumes standard OpenFOAM file structure with parentheses
-- Configuration file must be at `../inputs/inputs.in` relative to execution directory
+- Single timestep processing (time-stepping under development)
+- Serial execution only (parallel support planned)
+
+### Solver-Specific
+- **OpenFOAM**: Assumes standard file structure with parentheses
+- Other solvers: Not yet implemented (but architecture supports them)
+
+### Configuration
+- Fixed configuration file location: `../inputs/inputs.in` relative to execution directory
+- Limited output formats (CSV only, more formats planned)
 
 ## License
 
 [Specify your license here]
 
-## Author
+## Contributing
 
-[Specify author information here]
+This project is under active development. Contributions, suggestions, and feedback are welcome!
 
-## Branches
+### Areas for Contribution
+- Additional solver interfaces
+- Time-stepping algorithms
+- Parallel execution support
+- Testing and validation
+- Documentation improvements
+
+## Contact & Support
+
+For questions about the project or collaboration opportunities, please open an issue on GitHub.
+
+## Development Roadmap
+
+### Phase 1: Foundation (Current)
+- ✅ Basic I/O with OpenFOAM
+- ✅ External command execution
+- ✅ Error handling system
+- ✅ Random perturbation generation
+- 🚧 Time-stepping framework
+
+### Phase 2: Solver Abstraction
+- 🔜 Generic solver interface
+- 🔜 Additional solver support (SU2, custom formats)
+- 🔜 Solver-agnostic data structures
+
+### Phase 3: Advanced Features
+- 📋 Parallel execution
+- 📋 Adjoint capabilities
+- 📋 Adaptive time-stepping
+- 📋 In-memory coupling
+
+### Phase 4: Production
+- 📋 HPC optimization
+- 📋 Comprehensive testing suite
+- 📋 Documentation and examples
+
+**Legend**: ✅ Complete | 🚧 In Progress | 🔜 Next | 📋 Planned
+
+## Repository Branches
 
 - **main**: Stable release branch
 - **external-commands**: Adds external command execution capability
-- **zeus**: Development branch for Zeus cluster integration
+- **zeus**: Active development branch (Zeus cluster integration and new features)
 
 ## Version History
 
-- v2.0 (zeus branch): Zeus cluster integration
-- v1.1 (external-commands): Added external command execution support
-- v1.0 (Initial release): Basic OpenFOAM to CSV converter
+- **v2.1 (zeus branch)**: 
+  - Centralized hierarchical error handling system
+  - Improved error diagnostics and logging
+  - Enhanced code documentation
+- **v2.0 (zeus branch)**: Zeus cluster integration
+- **v1.1 (external-commands)**: Added external command execution support
+- **v1.0 (Initial release)**: Basic OpenFOAM to CSV converter
