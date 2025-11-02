@@ -52,6 +52,7 @@ PROGRAM main
 
     ! Get a free file unit
     CALL get_unit(unit_num)
+
     OPEN(UNIT=unit_num, FILE='disturbance.txt', STATUS='REPLACE', ACTION='WRITE', IOSTAT=error_status)
     IF (error_status /= 0) THEN
         WRITE(*,*) 'FATAL: Failed to open disturbance.txt for writing (IOSTAT:', error_status, ')'
@@ -63,7 +64,9 @@ PROGRAM main
     WRITE(unit_num, *) SIZE(pert_0)
 
     ! Write all elements of the vector, one per line (A simple, easy-to-read format)
-    WRITE(unit_num, *) pert_0
+    DO i = 1, data_count
+        WRITE(unit_num, *) pert_0(i)
+    END DO
 
     CLOSE(unit_num)
 
