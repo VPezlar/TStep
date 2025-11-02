@@ -17,6 +17,7 @@ CONTAINS
                            file_var, &
                            output_file, &
                            COMMAND_RUN, &
+                           dist_mag, &
                            flow_format
 
         ierr = 0
