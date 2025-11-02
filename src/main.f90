@@ -18,6 +18,17 @@ PROGRAM main
         RETURN
     END IF
 
+        ! Call the new subroutine
+    CALL run_simulation(COMMAND_RUN, STATUS_CODE)
+
+    IF (STATUS_CODE /= 0) THEN
+        WRITE(*,*) 'EXECUTION STOPPED DUE TO EXTERNAL PROGRAM FAILURE.'
+        STOP
+    END IF
+
+    ! Continue with other code if STATUS_CODE is 0
+    WRITE(*,*) 'PROCEEDING TO NEXT STEP.'
+
     ! --- Main Execution ---
     ! Read flowfield data
     CALL read_flowfield(rho_in, p_in, T_in, U_in, V_in, W_in, &
@@ -38,16 +49,6 @@ PROGRAM main
         STOP 2
     END IF
 
-    ! Call the new subroutine
-    CALL run_simulation(COMMAND_RUN, STATUS_CODE)
-
-    IF (STATUS_CODE /= 0) THEN
-        WRITE(*,*) 'EXECUTION STOPPED DUE TO EXTERNAL PROGRAM FAILURE.'
-        STOP
-    END IF
-
-    ! Continue with other code if STATUS_CODE is 0
-    WRITE(*,*) 'PROCEEDING TO NEXT STEP.'
 
     ! Cleanup allocated memory
     CALL cleanup_allocations()
