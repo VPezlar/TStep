@@ -40,6 +40,9 @@ PROGRAM main
         STOP 1
     END IF
 
+        ! Call the new subroutine
+    CALL initial_disturbance(data_count, dist_mag, pert_0, error_status)
+
     ! Write flowfield data to file
     CALL write_flowfield_data(Xgrid, Ygrid, Zgrid, rho_in, p_in, T_in, &
                               U_in, V_in, W_in, data_count, error_status)
