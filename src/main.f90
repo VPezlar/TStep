@@ -8,7 +8,7 @@ PROGRAM main
 
     IMPLICIT NONE
 
-    REAL(rk), DIMENSION(:), ALLOCATABLE :: rho_in, p_in, T_in, U_in, V_in, W_in, Xgrid, Ygrid, Zgrid
+    REAL(rk), DIMENSION(:), ALLOCATABLE :: rho_in, p_in, T_in, U_in, V_in, W_in, Xgrid, Ygrid, Zgrid, pert_0
     INTEGER(ik) :: data_count
     INTEGER(ik) :: error_status, STATUS_CODE
 
