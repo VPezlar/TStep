@@ -1,6 +1,7 @@
 MODULE setup
     USE accuracy
     USE variables
+    USE error_handling
 
     IMPLICIT NONE
 
@@ -25,18 +26,16 @@ CONTAINS
         OPEN(unit_num, file="../inputs/inputs.in", status="old", iostat=status_id, iomsg=message)
 
         IF (status_id /= 0) THEN
-            WRITE(*,*) 'ERROR in configurationRead: Could not open file: ../inputs/inputs.in'
-            WRITE(*,*) 'Message: ', TRIM(message)
-            ierr = 1
+            ierr = ERR_SETUP_FILE_OPEN
+            CALL log_error(ERR_SETUP_FILE_OPEN, 'File: ../inputs/inputs.in - '//TRIM(message))
             RETURN
         END IF
 
         READ(unit_num, nml=Setup, iostat=status_id, iomsg=message)
 
         IF (status_id /= 0) THEN
-            WRITE(*,*) 'ERROR in configurationRead: Could not read namelist Setup'
-            WRITE(*,*) 'Message: ', TRIM(message)
-            ierr = 2
+            ierr = ERR_SETUP_NAMELIST_READ
+            CALL log_error(ERR_SETUP_NAMELIST_READ, TRIM(message))
             CLOSE(unit_num)
             RETURN
         END IF

@@ -2,28 +2,11 @@ MODULE OpenFOAM_IO
     USE accuracy
     USE variables
     USE setup, ONLY: get_unit
+    USE error_handling
 
     IMPLICIT NONE
     ! Purpose: Provides subroutines to read custom datasets (Header, Count N, N lines of data).
-
-    ! Error codes for read_OF_scalars
-    INTEGER(ik), PARAMETER :: ERR_SCALAR_OPEN = 1
-    INTEGER(ik), PARAMETER :: ERR_SCALAR_HEADER = 2
-    INTEGER(ik), PARAMETER :: ERR_SCALAR_COUNT = 3
-    INTEGER(ik), PARAMETER :: ERR_SCALAR_INVALID_COUNT = 4
-    INTEGER(ik), PARAMETER :: ERR_SCALAR_ALLOC = 5
-    INTEGER(ik), PARAMETER :: ERR_SCALAR_SKIP = 6
-    INTEGER(ik), PARAMETER :: ERR_SCALAR_READ = 7
-
-    ! Error codes for read_OF_vectors
-    INTEGER(ik), PARAMETER :: ERR_VECTOR_OPEN = 11
-    INTEGER(ik), PARAMETER :: ERR_VECTOR_HEADER = 12
-    INTEGER(ik), PARAMETER :: ERR_VECTOR_COUNT = 13
-    INTEGER(ik), PARAMETER :: ERR_VECTOR_SKIP = 14
-    INTEGER(ik), PARAMETER :: ERR_VECTOR_INVALID_COUNT = 15
-    INTEGER(ik), PARAMETER :: ERR_VECTOR_ALLOC = 16
-    INTEGER(ik), PARAMETER :: ERR_VECTOR_EOF = 17
-    INTEGER(ik), PARAMETER :: ERR_VECTOR_FORMAT = 18
+    ! Error codes are now imported from error_handling module
 
 
 CONTAINS
@@ -60,8 +43,8 @@ CONTAINS
             action='read', iostat=iostat_val)
 
         IF (iostat_val /= 0) THEN
-            WRITE(*,*) 'ERROR in read_OF_scalars: Could not open file:', TRIM(filename)
             ierr = ERR_SCALAR_OPEN
+            CALL log_error(ERR_SCALAR_OPEN, 'File: '//TRIM(filename))
             RETURN
         END IF
 
@@ -69,8 +52,8 @@ CONTAINS
         DO i = 1, n_header_lines
             READ(unit_num, *, iostat=iostat_val)
             IF (iostat_val /= 0) THEN
-                WRITE(*,*) 'ERROR in read_OF_scalars: Premature EOF while skipping header.'
                 ierr = ERR_SCALAR_HEADER
+                CALL log_error(ERR_SCALAR_HEADER, 'File: '//TRIM(filename))
                 CLOSE(unit_num)
                 RETURN
             END IF
@@ -79,8 +62,8 @@ CONTAINS
         ! 2. Read the Number of Data Points (N)
         READ(unit_num, *, iostat=iostat_val) count_read
         IF (iostat_val /= 0) THEN
-            WRITE(*,*) 'ERROR in read_OF_scalars: Could not read data count (N).'
             ierr = ERR_SCALAR_COUNT
+            CALL log_error(ERR_SCALAR_COUNT, 'File: '//TRIM(filename))
             CLOSE(unit_num)
             RETURN
         END IF
@@ -89,8 +72,9 @@ CONTAINS
 
         ! Validation: Ensure the count is positive before allocation.
         IF (n_data_points <= 0) THEN
-            WRITE(*,*) 'ERROR in read_OF_scalars: Invalid data count (N <= 0):', n_data_points
             ierr = ERR_SCALAR_INVALID_COUNT
+            CALL log_error(ERR_SCALAR_INVALID_COUNT, 'File: '//TRIM(filename)//', Count: '//&
+                          TRIM(ADJUSTL(INT_TO_STR(n_data_points))))
             CLOSE(unit_num)
             RETURN
         END IF
@@ -98,8 +82,8 @@ CONTAINS
         ! 3. Skip the required single line after N (e.g., opening parenthesis)
         READ(unit_num, *, iostat=iostat_val)
         IF (iostat_val /= 0) THEN
-            WRITE(*,*) 'ERROR in read_OF_scalars: Premature EOF while skipping discard line.'
             ierr = ERR_SCALAR_SKIP
+            CALL log_error(ERR_SCALAR_SKIP, 'File: '//TRIM(filename))
             CLOSE(unit_num)
             RETURN
         END IF
@@ -107,8 +91,9 @@ CONTAINS
         ! 4. Allocate the Data Vector
         ALLOCATE(data_vector(n_data_points), stat=iostat_val)
         IF (iostat_val /= 0) THEN
-            WRITE(*,*) 'ERROR in read_OF_scalars: Could not allocate memory.'
             ierr = ERR_SCALAR_ALLOC
+            CALL log_error(ERR_SCALAR_ALLOC, 'File: '//TRIM(filename)//', Size: '//&
+                          TRIM(ADJUSTL(INT_TO_STR(n_data_points))))
             CLOSE(unit_num)
             RETURN
         END IF
@@ -117,8 +102,8 @@ CONTAINS
         ! Reads all N values into the allocated array using free-format reading.
         READ(unit_num, *, iostat=iostat_val) data_vector(:)
         IF (iostat_val /= 0) THEN
-            WRITE(*,*) 'WARNING in read_OF_scalars: Could not read all data points.'
             ierr = ERR_SCALAR_READ
+            CALL log_error(ERR_SCALAR_READ, 'File: '//TRIM(filename))
         END IF
 
         ! Close the file unit, releasing it for future use.
@@ -162,8 +147,8 @@ CONTAINS
             action='read', iostat=iostat_val)
 
         IF (iostat_val /= 0) THEN
-            WRITE(*,*) 'ERROR in read_OF_vectors: Could not open file:', TRIM(filename)
             ierr = ERR_VECTOR_OPEN
+            CALL log_error(ERR_VECTOR_OPEN, 'File: '//TRIM(filename))
             RETURN
         END IF
 
@@ -171,8 +156,8 @@ CONTAINS
         DO i = 1, n_header_lines
             READ(unit_num, *, iostat=iostat_val)
             IF (iostat_val /= 0) THEN
-                WRITE(*,*) 'ERROR in read_OF_vectors: Premature EOF while skipping header.'
                 ierr = ERR_VECTOR_HEADER
+                CALL log_error(ERR_VECTOR_HEADER, 'File: '//TRIM(filename))
                 CLOSE(unit_num)
                 RETURN
             END IF
@@ -181,8 +166,8 @@ CONTAINS
         ! 2. Read the Number of Data Points (N)
         READ(unit_num, *, iostat=iostat_val) count_read
         IF (iostat_val /= 0) THEN
-            WRITE(*,*) 'ERROR in read_OF_vectors: Could not read data count (N).'
             ierr = ERR_VECTOR_COUNT
+            CALL log_error(ERR_VECTOR_COUNT, 'File: '//TRIM(filename))
             CLOSE(unit_num)
             RETURN
         END IF
@@ -192,16 +177,17 @@ CONTAINS
         ! 3. Skip the required single line after N
         READ(unit_num, *, iostat=iostat_val)
         IF (iostat_val /= 0) THEN
-            WRITE(*,*) 'ERROR in read_OF_vectors: Premature EOF while skipping discard line.'
             ierr = ERR_VECTOR_SKIP
+            CALL log_error(ERR_VECTOR_SKIP, 'File: '//TRIM(filename))
             CLOSE(unit_num)
             RETURN
         END IF
 
         ! Validation and Allocation
         IF (n_data_points <= 0) THEN
-            WRITE(*,*) 'ERROR in read_OF_vectors: Invalid data count (N <= 0):', n_data_points
             ierr = ERR_VECTOR_INVALID_COUNT
+            CALL log_error(ERR_VECTOR_INVALID_COUNT, 'File: '//TRIM(filename)//', Count: '//&
+                          TRIM(ADJUSTL(INT_TO_STR(n_data_points))))
             CLOSE(unit_num)
             RETURN
         END IF
@@ -209,8 +195,9 @@ CONTAINS
         ! Allocate all three coordinate vectors simultaneously.
         ALLOCATE(x_vector(n_data_points), y_vector(n_data_points), z_vector(n_data_points), stat=iostat_val)
         IF (iostat_val /= 0) THEN
-            WRITE(*,*) 'ERROR in read_OF_vectors: Could not allocate memory.'
             ierr = ERR_VECTOR_ALLOC
+            CALL log_error(ERR_VECTOR_ALLOC, 'File: '//TRIM(filename)//', Size: '//&
+                          TRIM(ADJUSTL(INT_TO_STR(n_data_points))))
             CLOSE(unit_num)
             RETURN
         END IF
@@ -221,8 +208,9 @@ CONTAINS
             ! Read the entire line into a character buffer.
             READ(unit_num, '(A)', iostat=iostat_val) line_buffer
             IF (iostat_val /= 0) THEN
-                WRITE(*,*) 'WARNING in read_OF_vectors: EOF encountered prematurely at index', i
                 ierr = ERR_VECTOR_EOF
+                CALL log_error(ERR_VECTOR_EOF, 'File: '//TRIM(filename)//', At index: '//&
+                              TRIM(ADJUSTL(INT_TO_STR(i))))
                 CLOSE(unit_num)
                 RETURN
             END IF
@@ -234,8 +222,9 @@ CONTAINS
             ! The substring (2:buf_len-1) skips the opening '(' and closing ')'.
             READ(line_buffer(2:buf_len-1), *, iostat=iostat_val) x_vector(i), y_vector(i), z_vector(i)
             IF (iostat_val /= 0) THEN
-                WRITE(*,*) 'ERROR in read_OF_vectors: Format error on line:', i
                 ierr = ERR_VECTOR_FORMAT
+                CALL log_error(ERR_VECTOR_FORMAT, 'File: '//TRIM(filename)//', Line: '//&
+                              TRIM(ADJUSTL(INT_TO_STR(i))))
                 CLOSE(unit_num)
                 RETURN
             END IF
@@ -245,5 +234,12 @@ CONTAINS
         CLOSE(unit_num)
 
     END SUBROUTINE read_OF_vectors
+    
+    ! Helper function to convert integer to string
+    FUNCTION INT_TO_STR(val) RESULT(str)
+        INTEGER(ik), INTENT(IN) :: val
+        CHARACTER(len=20) :: str
+        WRITE(str, '(I0)') val
+    END FUNCTION INT_TO_STR
 
 END MODULE OpenFOAM_IO

@@ -2,6 +2,7 @@ MODULE random_disturbance
     USE accuracy
     USE variables
     USE setup
+    USE error_handling
 
     IMPLICIT NONE
 
@@ -31,16 +32,16 @@ CONTAINS
         END IF
 
         IF (VECTOR_LENGTH <= 0) THEN
-            WRITE(*,*) 'FATAL: Vector length must be positive.'
-            ERROR_STATUS = 1
+            ERROR_STATUS = ERR_DIST_INVALID_LENGTH
+            CALL log_error(ERR_DIST_INVALID_LENGTH, 'Length specified: 0 or negative')
             RETURN
         END IF
 
         ! 1. Allocate the output vector
         ALLOCATE(FINAL_VECTOR(VECTOR_LENGTH), STAT=ALLOC_STAT)
         IF (ALLOC_STAT /= 0) THEN
-            WRITE(*,*) 'FATAL: Failed to allocate memory for the final vector.'
-            ERROR_STATUS = 2
+            ERROR_STATUS = ERR_DIST_ALLOC
+            CALL log_error(ERR_DIST_ALLOC, 'Allocation status: '//TRIM(ADJUSTL(INT_TO_STR(ALLOC_STAT))))
             RETURN
         END IF
 
@@ -54,9 +55,9 @@ CONTAINS
 
         ! Check if the norm is effectively zero (highly unlikely but good practice)
         IF (NORM_VAL < 1.0E-12_rk) THEN
-            WRITE(*,*) 'WARNING: Norm is zero or near-zero. Cannot normalize.'
+            ERROR_STATUS = ERR_DIST_ZERO_NORM
+            CALL log_error(ERR_DIST_ZERO_NORM, 'Computed norm is near zero')
             DEALLOCATE(FINAL_VECTOR)
-            ERROR_STATUS = 3
             RETURN
         END IF
 
@@ -68,5 +69,12 @@ CONTAINS
         FINAL_VECTOR = FINAL_VECTOR * SCALING_CONSTANT
 
     END SUBROUTINE initial_disturbance
+    
+    ! Helper function to convert integer to string
+    FUNCTION INT_TO_STR(val) RESULT(str)
+        INTEGER, INTENT(IN) :: val
+        CHARACTER(len=20) :: str
+        WRITE(str, '(I0)') val
+    END FUNCTION INT_TO_STR
 
 END MODULE random_disturbance

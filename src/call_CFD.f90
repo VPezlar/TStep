@@ -1,4 +1,6 @@
 MODULE call_CFD
+    USE error_handling
+    
     IMPLICIT NONE
 
     PRIVATE
@@ -33,15 +35,15 @@ CONTAINS
         ! --- Check Status ---
         IF (CMD_STAT_VAL /= 0) THEN
             ! Command failed to launch (e.g., 'mpirun' not found)
-            WRITE(*,*) 'FATAL: OS failed to launch command. CMDSTAT:', CMD_STAT_VAL
-            ERROR_STATUS = 1 ! Use a unique error code for launch failure
+            ERROR_STATUS = ERR_CMD_LAUNCH_FAILED
+            CALL log_error(ERR_CMD_LAUNCH_FAILED, 'CMDSTAT: '//TRIM(ADJUSTL(INT_TO_STR(CMD_STAT_VAL))))
             RETURN
         END IF
         
         IF (EXIT_STAT_VAL /= 0) THEN
             ! Command launched but finished with a non-zero (error) code
-            WRITE(*,*) 'FATAL: Command finished with non-zero exit code:', EXIT_STAT_VAL
-            ERROR_STATUS = 2 ! Use a unique error code for execution failure
+            ERROR_STATUS = ERR_CMD_NONZERO_EXIT
+            CALL log_error(ERR_CMD_NONZERO_EXIT, 'Exit code: '//TRIM(ADJUSTL(INT_TO_STR(EXIT_STAT_VAL))))
             RETURN
         END IF
         
@@ -49,5 +51,12 @@ CONTAINS
         WRITE(*,*) 'SUCCESS: Command finished successfully (Exit Code 0).'
         
     END SUBROUTINE run_simulation
+    
+    ! Helper function to convert integer to string
+    FUNCTION INT_TO_STR(val) RESULT(str)
+        INTEGER, INTENT(IN) :: val
+        CHARACTER(len=20) :: str
+        WRITE(str, '(I0)') val
+    END FUNCTION INT_TO_STR
 
 END MODULE call_CFD

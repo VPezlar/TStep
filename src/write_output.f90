@@ -2,6 +2,7 @@ MODULE write_output
     USE accuracy
     USE variables
     USE setup
+    USE error_handling
 
     IMPLICIT NONE
 
@@ -22,13 +23,6 @@ CONTAINS
 
         error_status = 0
 
-        ! Read configuration
-        CALL configurationRead(error_status)
-        IF (error_status /= 0) THEN
-            WRITE(*,*) 'FATAL: Configuration read failed.'
-            RETURN
-        END IF
-
         ! Get a free file unit
         CALL get_unit(unit_num)
 
@@ -37,8 +31,8 @@ CONTAINS
             action='write', iostat=iostat_val)
 
         IF (iostat_val /= 0) THEN
-            WRITE(*,*) 'ERROR: Could not open output file:', TRIM(output_file)
-            error_status = 1
+            error_status = ERR_OUTPUT_FILE_OPEN
+            CALL log_error(ERR_OUTPUT_FILE_OPEN, 'File: '//TRIM(output_file))
             RETURN
         END IF
 

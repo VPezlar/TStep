@@ -9,26 +9,28 @@ TStep reads OpenFOAM flow field data files (pressure, density, temperature, velo
 ## Features
 
 - **External command execution**: Run CFD simulations (e.g., OpenFOAM solvers) directly from the application
+- **Random disturbance generation**: Create normalized, scaled random perturbation vectors for sensitivity analysis
 - Reads OpenFOAM scalar fields (pressure, density, temperature)
 - Reads OpenFOAM vector fields (velocity components U, V, W)
 - Reads grid cell center coordinates (X, Y, Z)
 - Exports all data to a single CSV file
 - Configurable via namelist input file
-- Robust error handling and memory management
+- Robust error handling and memory management with comprehensive error codes
 
 ## Project Structure
 
 ```
 TStep/
 ├── src/              # Source files
-│   ├── main.f90           # Main program
-│   ├── accuracy.f90       # Precision definitions
-│   ├── variables.f90      # Global variables
-│   ├── setup.f90          # Configuration reading
-│   ├── call_CFD.f90       # External command execution
-│   ├── read_flow.f90      # Flow field reading module
-│   ├── write_output.f90   # CSV output writing
-│   └── OpenFOAM_IO.f90    # OpenFOAM file I/O routines
+│   ├── main.f90              # Main program
+│   ├── accuracy.f90          # Precision definitions
+│   ├── variables.f90         # Global variables
+│   ├── setup.f90             # Configuration reading
+│   ├── call_CFD.f90          # External command execution
+│   ├── random_disturbance.f90 # Random perturbation generation
+│   ├── read_flow.f90         # Flow field reading module
+│   ├── write_output.f90      # CSV output writing
+│   └── OpenFOAM_IO.f90       # OpenFOAM file I/O routines
 ├── inputs/           # Input configuration files
 ├── output/           # Output CSV files
 ├── bin/              # Compiled executables
@@ -45,6 +47,10 @@ main.f90
   ├─ accuracy
   ├─ setup
   ├─ call_CFD
+  ├─ random_disturbance
+  │   ├─ accuracy
+  │   ├─ variables
+  │   └─ setup
   ├─ read_flow
   │   ├─ accuracy
   │   ├─ variables
@@ -62,6 +68,7 @@ gfortran -c src/accuracy.f90 -o obj/accuracy.o -J mod/
 gfortran -c src/variables.f90 -o obj/variables.o -J mod/
 gfortran -c src/setup.f90 -o obj/setup.o -J mod/
 gfortran -c src/call_CFD.f90 -o obj/call_CFD.o -J mod/
+gfortran -c src/random_disturbance.f90 -o obj/random_disturbance.o -J mod/
 gfortran -c src/OpenFOAM_IO.f90 -o obj/OpenFOAM_IO.o -J mod/
 gfortran -c src/read_flow.f90 -o obj/read_flow.o -J mod/
 gfortran -c src/write_output.f90 -o obj/write_output.o -J mod/
@@ -78,6 +85,7 @@ The program reads configuration from `inputs/inputs.in` using a Fortran namelist
 output_file         = '../output/flowfield.csv',
 flow_format         = 'OpenFOAM',
 COMMAND_RUN         = 'cd /path/to/case && rhoCentralFoam',
+dist_mag            = 1.0d-6,
 N_HEADER_grid       = 21,
 N_HEADER_var        = 21,
 file_grid           = '/path/to/openfoam/case/0/C',
@@ -92,6 +100,7 @@ file_var            = '/path/to/openfoam/case/timestep/',
 | `output_file` | string | Path to output CSV file |
 | `flow_format` | string | Flow solver format (e.g., 'OpenFOAM') |
 | `COMMAND_RUN` | string | External command to execute CFD simulation |
+| `dist_mag` | real | Magnitude for random disturbance vector scaling |
 | `N_HEADER_grid` | integer | Number of header lines in grid coordinate file |
 | `N_HEADER_var` | integer | Number of header lines in variable files |
 | `file_grid` | string | Path to OpenFOAM cell center coordinate file (typically `C`) |
@@ -170,6 +179,29 @@ The command specified in `COMMAND_RUN` configuration parameter is executed befor
 2. Wait for completion
 3. Process the resulting flow field data
 
+### random_disturbance
+Random perturbation generation module for sensitivity analysis:
+- `initial_disturbance(VECTOR_LENGTH, SCALING_CONSTANT, FINAL_VECTOR, ERROR_STATUS)`: Generates normalized random disturbance vector
+
+#### Features:
+- Generates uniform random values in [0, 1)
+- L2-normalization (unit vector)
+- Configurable magnitude scaling
+- Robust allocation and validation
+
+#### Algorithm:
+1. Allocate vector of specified length
+2. Fill with uniform random values using `RANDOM_NUMBER`
+3. Calculate L2-norm using intrinsic `NORM2` function
+4. Normalize to unit magnitude
+5. Scale by `dist_mag` parameter
+
+#### Error Codes:
+- `0`: Success
+- `1`: Invalid vector length (≤ 0)
+- `2`: Memory allocation failed
+- `3`: Zero or near-zero norm (cannot normalize)
+
 ### accuracy
 Defines precision for integer and real variables using ISO Fortran intrinsic types:
 - `ik`: 32-bit integers (`int32`)
@@ -177,11 +209,14 @@ Defines precision for integer and real variables using ISO Fortran intrinsic typ
 
 ### variables
 Global variables module containing:
-- `OF_N_HEADER_grid`: Number of header lines in grid file
-- `OF_N_HEADER_var`: Number of header lines in variable files
-- `OF_file_grid`: Grid coordinate file path
-- `OF_file_var`: Variable file path prefix
+- `N_HEADER_grid`: Number of header lines in grid file
+- `N_HEADER_var`: Number of header lines in variable files
+- `file_grid`: Grid coordinate file path
+- `file_var`: Variable file path prefix
 - `output_file`: Output CSV file path
+- `flow_format`: Flow solver format identifier
+- `COMMAND_RUN`: External command string
+- `dist_mag`: Disturbance magnitude scaling factor
 
 ### setup
 Configuration reading module with subroutines:
@@ -234,27 +269,46 @@ Output format: Scientific notation with 15 significant digits (`ES23.15E3`)
 Main program that:
 1. Reads configuration from `inputs.in`
 2. Executes external CFD command via `run_simulation()` if configured
-3. Calls `read_flowfield()` to read all OpenFOAM data
-4. Calls `write_flowfield_data()` to export to CSV
-5. Performs cleanup of allocated memory
-6. Returns exit codes:
+3. Reads flow field data via `read_flowfield()`
+4. Generates random disturbance vector via `initial_disturbance()`
+5. Writes results to CSV via `write_flowfield_data()`
+6. Performs cleanup of all allocated memory
+7. Returns exit codes:
    - `0`: Success
    - `1`: Flow field read failure
    - `2`: Output write failure
+   - `3`: Disturbance generation failure
 
 ## Error Handling
 
-The program uses a consistent error handling pattern:
-- All I/O operations check return status codes
-- Errors are reported to standard output with descriptive messages
-- Memory is properly deallocated on error conditions
-- The program exits with meaningful status codes
+The program uses a comprehensive error handling strategy:
+
+### Principles:
+- **Consistent status codes**: All subroutines use `error_status`/`ierr` output parameters
+- **Early returns**: Functions return immediately on error with descriptive messages
+- **Defensive allocation**: All allocations checked before use; deallocations check `ALLOCATED()` status
+- **Comprehensive validation**: Input parameters validated before processing
+- **Clean error paths**: Memory properly deallocated on all error conditions
+- **Meaningful exit codes**: Main program exits with specific codes for each failure type
+
+### Error Code Ranges:
+- **Main program**: 0 (success), 1-3 (specific failures)
+- **Configuration**: 0 (success), 1-2 (file/parse errors)
+- **OpenFOAM scalars**: 0 (success), 1-7 (detailed I/O errors)
+- **OpenFOAM vectors**: 0 (success), 11-18 (detailed I/O errors)
+- **External commands**: 0 (success), 1-2 (launch/execution errors)
+- **Random disturbance**: 0 (success), 1-3 (validation/allocation/normalization errors)
 
 ## Memory Management
 
-- All dynamic arrays are properly allocated and deallocated
-- The `cleanup_allocations()` subroutine ensures no memory leaks
-- Arrays are checked before deallocation to prevent errors
+The application follows best practices for memory management:
+
+- **Safe allocation**: All `ALLOCATE` statements include `STAT=` checks
+- **Safe deallocation**: All deallocations protected by `ALLOCATED()` checks
+- **Centralized cleanup**: `cleanup_allocations()` subroutine handles all main arrays
+- **Error path cleanup**: Memory deallocated on all error paths before early return
+- **Pre-allocation cleanup**: Arrays deallocated before reallocation to prevent leaks
+- **No memory leaks**: All allocated arrays properly tracked and freed
 
 ## Requirements
 

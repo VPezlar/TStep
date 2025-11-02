@@ -13,6 +13,7 @@ FC := gfortran
 FFLAGS := -O3 -J$(MODDIR) -c -fcheck=all -Warray-bounds -ffree-form -Wall -Wno-tabs #-fno-backtrace
 
 OBJECTS = accuracy.o \
+	  error_handling.o \
 	  variables.o \
 	  setup.o \
 	  OpenFOAM_IO.o \
