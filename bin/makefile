@@ -19,6 +19,7 @@ OBJECTS = accuracy.o \
 	  read_flow.o \
 	  write_output.o \
 	  call_CFD.o \
+	  random_disturbance.o \
 	  main.o
 
 # Compilation rule
