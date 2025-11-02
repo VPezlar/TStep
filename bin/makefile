@@ -6,8 +6,8 @@ OBJDIR := ../obj
 BINDIR := ../bin
 EXECUT := TStep
 
-LIBBLAS := -framework Accelerate
-LIBHDF5 := -I$(shell brew --prefix hdf5)/include -L$(shell brew --prefix hdf5)/lib -lhdf5 -lhdf5_fortran
+# LIBBLAS := -framework Accelerate
+# LIBHDF5 := -I$(shell brew --prefix hdf5)/include -L$(shell brew --prefix hdf5)/lib -lhdf5 -lhdf5_fortran
 
 FC := gfortran
 FFLAGS := -O3 -J$(MODDIR) -c -fcheck=all -Warray-bounds -ffree-form -Wall -Wno-tabs #-fno-backtrace
@@ -23,14 +23,14 @@ OBJECTS = accuracy.o \
 
 # Compilation rule
 $(OBJDIR)/%.o : $(SRCDIR)/%.f90
-	$(FC) $(FFLAGS) $< -o $@
+        $(FC) $(FFLAGS) $< -o $@
 
 OBJPROG = $(addprefix $(OBJDIR)/, $(OBJECTS))
 
 all : $(BINDIR)/$(EXECUT)
 
 $(BINDIR)/$(EXECUT): $(OBJPROG)
-	$(FC) $^ $(LIBHDF5) $(LIBBLAS) -o $@
+        $(FC) $^ $(LIBHDF5) $(LIBBLAS) -o $@
 
 clean:
-	rm -f $(OBJDIR)/*.o $(MODDIR)/*.mod $(BINDIR)/$(EXECUT) ./fort.*
+        rm -f $(OBJDIR)/*.o $(MODDIR)/*.mod $(BINDIR)/$(EXECUT) ./fort.*
