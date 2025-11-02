@@ -10,8 +10,9 @@ PROGRAM main
     IMPLICIT NONE
 
     REAL(rk), DIMENSION(:), ALLOCATABLE :: rho_in, p_in, T_in, U_in, V_in, W_in, Xgrid, Ygrid, Zgrid, pert_0
-    INTEGER(ik) :: data_count, unit_num
+    INTEGER(ik) :: data_count
     INTEGER(ik) :: error_status, STATUS_CODE
+    INTEGER(ik) :: unit_num
 
     ! Read configuration
     CALL configurationRead(error_status)
@@ -51,10 +52,8 @@ PROGRAM main
 
     ! Get a free file unit
     CALL get_unit(unit_num)
-    ! --- Write Initial Disturbance to File: disturbance.txt ---
-    OPEN(unit_num, 'disturbance.txt', 'REPLACE', 'WRITE', error_status)
-
-    IF (IO_STATUS /= 0) THEN
+    OPEN(UNIT=unit_num, FILE='disturbance.txt', STATUS='REPLACE', ACTION='WRITE', IOSTAT=error_status)
+    IF (error_status /= 0) THEN
         WRITE(*,*) 'FATAL: Failed to open disturbance.txt for writing (IOSTAT:', error_status, ')'
         ! Handle error gracefully if needed
         STOP 90
