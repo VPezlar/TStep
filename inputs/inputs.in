@@ -4,6 +4,6 @@ flow_format           = 'OpenFOAM',
 COMMAND_RUN           = 'mkdir NEW_FOLDER_TEST',
 N_HEADER_grid         = 21,
 N_HEADER_var          = 21,
-file_grid             = '/Users/vojtechpezlar/Dropbox/PhD/Development/OpenFOAM/TMCone/ConeCase/OpenFOAM/TestRun/0/C',
-file_var              = '/Users/vojtechpezlar/Dropbox/PhD/Development/OpenFOAM/TMCone/ConeCase/OpenFOAM/TestRun/9.98898e-08/',
+file_grid             = '~/work/openfoam/OpenFOAM-v2506/tutorials/compressible/rhoCentralFoam/wedge15Ma5/0/C',
+file_var              = '~/work/openfoam/OpenFOAM-v2506/tutorials/compressible/rhoCentralFoam/wedge15Ma5/0.2/',
 /
