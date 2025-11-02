@@ -53,7 +53,6 @@ PROGRAM main
         STOP 2
     END IF
 
-
     ! Cleanup allocated memory
     CALL cleanup_allocations()
 
