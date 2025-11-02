@@ -29,7 +29,7 @@ PROGRAM main
     ! Continue with other code if STATUS_CODE is 0
     WRITE(*,*) 'PROCEEDING TO NEXT STEP.'
 
-    ! --- Main Execution ---
+    ! --- Read Flowfield ---
     ! Read flowfield data
     CALL read_flowfield(rho_in, p_in, T_in, U_in, V_in, W_in, &
                         Xgrid, Ygrid, Zgrid, data_count, error_status)
