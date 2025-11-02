@@ -1,0 +1,10 @@
+This is line 1 of the header.
+This is line 2 of the header.
+This is line 3 of the header.
+5
+-
+(1.00001 1.001101110 -1.0002)
+(2.5 2.5 2.5)
+(3.7 3.7 3.7)
+(4.9 4.9 4.9)
+(5.2 5.2 5.2)
