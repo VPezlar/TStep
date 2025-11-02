@@ -49,6 +49,32 @@ PROGRAM main
         STOP ERR_MAIN_DISTURBANCE
     END IF
 
+    ! Get a free file unit
+    CALL get_unit(unit_num)
+    ! --- Write Initial Disturbance to File: disturbance.txt ---
+    OPEN(unit_num, 'disturbance.txt', 'REPLACE', 'WRITE', error_status)
+
+    IF (IO_STATUS /= 0) THEN
+        WRITE(*,*) 'FATAL: Failed to open disturbance.txt for writing (IOSTAT:', error_status, ')'
+        ! Handle error gracefully if needed
+        STOP 90
+    END IF
+
+    ! Write the size of the vector first (optional, but often helpful for later reading)
+    WRITE(unit_num, *) SIZE(pert_0)
+
+    ! Write all elements of the vector, one per line (A simple, easy-to-read format)
+    WRITE(unit_num, *) pert_0
+
+    CLOSE(unit_num)
+
+    WRITE(*,*) 'SUCCESS: Wrote disturbance vector to disturbance.txt.'
+    ! --- End Write Disturbance Section ---
+
+
+
+
+
     ! Write flowfield data to file
     CALL write_flowfield_data(Xgrid, Ygrid, Zgrid, rho_in, p_in, T_in, &
                               U_in, V_in, W_in, data_count, error_status)
