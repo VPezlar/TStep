@@ -1,6 +1,6 @@
 # TStep - OpenFOAM Flow Field Data Converter
 
-A Fortran application for reading OpenFOAM flow field data and exporting it to CSV format for post-processing and analysis.
+A Fortran application for reading OpenFOAM flow field data and exporting it to CSV format for post-processing and analysis. The application can also execute external CFD simulations before processing the data.
 
 ## Overview
 
@@ -8,6 +8,7 @@ TStep reads OpenFOAM flow field data files (pressure, density, temperature, velo
 
 ## Features
 
+- **External command execution**: Run CFD simulations (e.g., OpenFOAM solvers) directly from the application
 - Reads OpenFOAM scalar fields (pressure, density, temperature)
 - Reads OpenFOAM vector fields (velocity components U, V, W)
 - Reads grid cell center coordinates (X, Y, Z)
@@ -24,6 +25,7 @@ TStep/
 │   ├── accuracy.f90       # Precision definitions
 │   ├── variables.f90      # Global variables
 │   ├── setup.f90          # Configuration reading
+│   ├── call_CFD.f90       # External command execution
 │   ├── read_flow.f90      # Flow field reading module
 │   ├── write_output.f90   # CSV output writing
 │   └── OpenFOAM_IO.f90    # OpenFOAM file I/O routines
@@ -41,6 +43,8 @@ The project uses Fortran 90/95 with the following module dependencies:
 ```
 main.f90
   ├─ accuracy
+  ├─ setup
+  ├─ call_CFD
   ├─ read_flow
   │   ├─ accuracy
   │   ├─ variables
@@ -57,6 +61,7 @@ Compilation example (using gfortran):
 gfortran -c src/accuracy.f90 -o obj/accuracy.o -J mod/
 gfortran -c src/variables.f90 -o obj/variables.o -J mod/
 gfortran -c src/setup.f90 -o obj/setup.o -J mod/
+gfortran -c src/call_CFD.f90 -o obj/call_CFD.o -J mod/
 gfortran -c src/OpenFOAM_IO.f90 -o obj/OpenFOAM_IO.o -J mod/
 gfortran -c src/read_flow.f90 -o obj/read_flow.o -J mod/
 gfortran -c src/write_output.f90 -o obj/write_output.o -J mod/
@@ -71,10 +76,12 @@ The program reads configuration from `inputs/inputs.in` using a Fortran namelist
 ```fortran
 &Setup
 output_file         = '../output/flowfield.csv',
-OF_N_HEADER_grid    = 21,
-OF_N_HEADER_var     = 21,
-OF_file_grid        = '/path/to/openfoam/case/0/C',
-OF_file_var         = '/path/to/openfoam/case/timestep/',
+flow_format         = 'OpenFOAM',
+COMMAND_RUN         = 'cd /path/to/case && rhoCentralFoam',
+N_HEADER_grid       = 21,
+N_HEADER_var        = 21,
+file_grid           = '/path/to/openfoam/case/0/C',
+file_var            = '/path/to/openfoam/case/timestep/',
 /
 ```
 
@@ -83,10 +90,12 @@ OF_file_var         = '/path/to/openfoam/case/timestep/',
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `output_file` | string | Path to output CSV file |
-| `OF_N_HEADER_grid` | integer | Number of header lines in grid coordinate file |
-| `OF_N_HEADER_var` | integer | Number of header lines in variable files |
-| `OF_file_grid` | string | Path to OpenFOAM cell center coordinate file (typically `C`) |
-| `OF_file_var` | string | Path prefix to OpenFOAM time directory containing field variables |
+| `flow_format` | string | Flow solver format (e.g., 'OpenFOAM') |
+| `COMMAND_RUN` | string | External command to execute CFD simulation |
+| `N_HEADER_grid` | integer | Number of header lines in grid coordinate file |
+| `N_HEADER_var` | integer | Number of header lines in variable files |
+| `file_grid` | string | Path to OpenFOAM cell center coordinate file (typically `C`) |
+| `file_var` | string | Path prefix to OpenFOAM time directory containing field variables |
 
 ## Input File Format
 
@@ -139,6 +148,27 @@ Where:
 3. The output CSV file will be created at the location specified in the configuration
 
 ## Modules
+
+### call_CFD
+External command execution module for running CFD simulations:
+- `run_simulation(COMMAND_STRING, ERROR_STATUS)`: Executes external command and monitors exit status
+
+#### Features:
+- Synchronous execution (waits for command completion)
+- Command launch status checking (`CMDSTAT`)
+- Exit code verification (`EXITSTAT`)
+- Detailed error reporting
+
+#### Error Codes:
+- `0`: Success
+- `1`: Command failed to launch (e.g., executable not found)
+- `2`: Command executed but returned non-zero exit code
+
+#### Usage:
+The command specified in `COMMAND_RUN` configuration parameter is executed before reading flow field data. This allows the application to:
+1. Run a CFD simulation
+2. Wait for completion
+3. Process the resulting flow field data
 
 ### accuracy
 Defines precision for integer and real variables using ISO Fortran intrinsic types:
@@ -202,10 +232,12 @@ Output format: Scientific notation with 15 significant digits (`ES23.15E3`)
 
 ### main
 Main program that:
-1. Calls `read_flowfield()` to read all OpenFOAM data
-2. Calls `write_flowfield_data()` to export to CSV
-3. Performs cleanup of allocated memory
-4. Returns exit codes:
+1. Reads configuration from `inputs.in`
+2. Executes external CFD command via `run_simulation()` if configured
+3. Calls `read_flowfield()` to read all OpenFOAM data
+4. Calls `write_flowfield_data()` to export to CSV
+5. Performs cleanup of allocated memory
+6. Returns exit codes:
    - `0`: Success
    - `1`: Flow field read failure
    - `2`: Output write failure
@@ -245,6 +277,14 @@ The program uses a consistent error handling pattern:
 
 [Specify author information here]
 
+## Branches
+
+- **main**: Stable release branch
+- **external-commands**: Adds external command execution capability
+- **zeus**: Development branch for Zeus cluster integration
+
 ## Version History
 
-- Initial release: Basic OpenFOAM to CSV converter
+- v2.0 (zeus branch): Zeus cluster integration
+- v1.1 (external-commands): Added external command execution support
+- v1.0 (Initial release): Basic OpenFOAM to CSV converter
