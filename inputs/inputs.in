@@ -1,5 +1,5 @@
 &Setup
-output_file           = '../output/flowfield.csv',
+output_file           = '../output/flowfield2.csv',
 flow_format           = 'OpenFOAM',
 COMMAND_RUN           = 'cd /home/vojtech-p/work/openfoam/OpenFOAM-v2506/tutorials/compressible/rhoCentralFoam/wedge15Ma5/ && rhoCentralFoam',
 N_HEADER_grid         = 21,
