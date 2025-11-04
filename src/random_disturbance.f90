@@ -49,6 +49,9 @@ CONTAINS
         !    (These are the base values for normalization)
         CALL RANDOM_NUMBER(FINAL_VECTOR)
 
+        ! 2b. Shift to [-1.0, 1.0) by scaling and translating
+        FINAL_VECTOR = 2.0_rk * FINAL_VECTOR - 1.0_rk
+
         ! 3. Calculate the L2-Norm (Magnitude) of the current vector
         !    NORM2 is an intrinsic function in Fortran for the L2-norm (sqrt(sum(x_i^2)))
         NORM_VAL = NORM2(FINAL_VECTOR)
