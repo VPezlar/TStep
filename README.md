@@ -510,7 +510,6 @@ For questions about the project or collaboration opportunities, please open an i
 
 ### Phase 3: Advanced Features
 - 📋 Parallel execution
-- 📋 Adjoint capabilities
 - 📋 Adaptive time-stepping
 - 📋 In-memory coupling
 
