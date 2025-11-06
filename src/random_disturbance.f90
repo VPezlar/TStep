@@ -14,14 +14,14 @@ CONTAINS
 
     SUBROUTINE initial_disturbance(VECTOR_LENGTH, SCALING_CONSTANT, FINAL_VECTOR, ERROR_STATUS)
         ! Arguments
-        INTEGER, INTENT(IN)              :: VECTOR_LENGTH        ! The desired size of the output vector (N)
+        INTEGER(ik), INTENT(IN)              :: VECTOR_LENGTH        ! The desired size of the output vector (N)
         REAL(rk), INTENT(IN)             :: SCALING_CONSTANT     ! The factor to multiply the normalized vector by
         REAL(rk), DIMENSION(:), ALLOCATABLE, INTENT(OUT) :: FINAL_VECTOR       ! The final real, normalized, and scaled vector
-        INTEGER, INTENT(OUT)             :: ERROR_STATUS         ! 0 for success, non-zero for failure
+        INTEGER(ik), INTENT(OUT)             :: ERROR_STATUS         ! 0 for success, non-zero for failure
 
         ! Local Variables
         REAL(rk) :: NORM_VAL       ! The calculated L2-norm (magnitude) of the initial random vector
-        INTEGER :: ALLOC_STAT     ! Status for allocation/deallocation
+        INTEGER(ik) :: ALLOC_STAT     ! Status for allocation/deallocation
 
         ! --- Initialization ---
         ERROR_STATUS = 0
@@ -75,7 +75,7 @@ CONTAINS
     
     ! Helper function to convert integer to string
     FUNCTION INT_TO_STR(val) RESULT(str)
-        INTEGER, INTENT(IN) :: val
+        INTEGER(ik), INTENT(IN) :: val
         CHARACTER(len=20) :: str
         WRITE(str, '(I0)') val
     END FUNCTION INT_TO_STR

@@ -1,4 +1,5 @@
 MODULE call_CFD
+    USE accuracy
     USE error_handling
     
     IMPLICIT NONE
@@ -11,11 +12,11 @@ CONTAINS
     SUBROUTINE run_simulation(COMMAND_STRING, ERROR_STATUS)
         ! Arguments
         CHARACTER(LEN=*), INTENT(IN) :: COMMAND_STRING
-        INTEGER, INTENT(OUT)         :: ERROR_STATUS
+        INTEGER(ik), INTENT(OUT)         :: ERROR_STATUS
 
         ! Local Variables (using default kind for integers since they are OS-specific)
-        INTEGER :: EXIT_STAT_VAL    ! Stores the exit code of the external program (0 for success)
-        INTEGER :: CMD_STAT_VAL     ! Stores the status of the command launch itself (0 if successful)
+        INTEGER(ik) :: EXIT_STAT_VAL    ! Stores the exit code of the external program (0 for success)
+        INTEGER(ik) :: CMD_STAT_VAL     ! Stores the status of the command launch itself (0 if successful)
 
         ! --- Initialization ---
         ERROR_STATUS = 0
@@ -54,7 +55,7 @@ CONTAINS
     
     ! Helper function to convert integer to string
     FUNCTION INT_TO_STR(val) RESULT(str)
-        INTEGER, INTENT(IN) :: val
+        INTEGER(ik), INTENT(IN) :: val
         CHARACTER(len=20) :: str
         WRITE(str, '(I0)') val
     END FUNCTION INT_TO_STR

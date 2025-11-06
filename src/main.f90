@@ -70,9 +70,7 @@ PROGRAM main
     END IF
     ! --- End TEMPORARY section ---
 
-
-        ! --- Read Flowfield ---
-    ! Read flowfield data
+    ! --- Write Flowfield ---
     CALL write_flowfield(rho_in + pert_0, &
                          p_in + pert_0, &
                          T_in + pert_0, &
