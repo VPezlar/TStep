@@ -267,8 +267,9 @@ CONTAINS
             RETURN
         END IF
 
-        ! Get file unit for input and open it
+        ! Get file units
         CALL get_unit(unit_in)
+        CALL get_unit(unit_out)
 
         ! Open original file for reading
         OPEN(unit=unit_in, file=TRIM(filename), status='old', action='read', iostat=iostat_val)
@@ -277,9 +278,6 @@ CONTAINS
             CALL log_error(ERR_SCALAR_OPEN, 'File: '//TRIM(filename))
             RETURN
         END IF
-
-        ! Get file unit for output (after input is opened)
-        CALL get_unit(unit_out)
 
         ! Open temporary file for writing
         OPEN(unit=unit_out, file=TRIM(temp_filename), status='replace', action='write', iostat=iostat_val)
@@ -426,8 +424,9 @@ CONTAINS
             RETURN
         END IF
 
-        ! Get file unit for input and open it
+        ! Get file units
         CALL get_unit(unit_in)
+        CALL get_unit(unit_out)
 
         ! Open original file for reading
         OPEN(unit=unit_in, file=TRIM(filename), status='old', action='read', iostat=iostat_val)
@@ -436,9 +435,6 @@ CONTAINS
             CALL log_error(ERR_VECTOR_OPEN, 'File: '//TRIM(filename))
             RETURN
         END IF
-
-        ! Get file unit for output (after input is opened)
-        CALL get_unit(unit_out)
 
         ! Open temporary file for writing
         OPEN(unit=unit_out, file=TRIM(temp_filename), status='replace', action='write', iostat=iostat_val)
