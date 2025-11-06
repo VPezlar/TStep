@@ -70,8 +70,21 @@ PROGRAM main
     ! --- End TEMPORARY section ---
 
 
+        ! --- Read Flowfield ---
+    ! Read flowfield data
+    CALL write_flowfield(rho_in + initial_disturbance, &
+                         p_in + initial_disturbance, &
+                         T_in + initial_disturbance, &
+                         U_in + initial_disturbance, &
+                         V_in + initial_disturbance, &
+                         W_in + initial_disturbance, &
+                         data_count, error_status)
 
-
+    IF (error_status /= 0) THEN
+        CALL log_error(ERR_MAIN_READ_FLOW)
+        CALL cleanup_allocations()
+        STOP ERR_MAIN_READ_FLOW
+    END IF
 
     ! Write flowfield data to file
     CALL write_flowfield_data(Xgrid, Ygrid, Zgrid, rho_in, p_in, T_in, &

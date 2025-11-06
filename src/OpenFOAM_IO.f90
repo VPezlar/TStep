@@ -242,4 +242,235 @@ CONTAINS
         WRITE(str, '(I0)') val
     END FUNCTION INT_TO_STR
 
+    ! Subroutine to write scalar data back to OpenFOAM file (preserving header and footer)
+    SUBROUTINE write_OF_scalars(filename, n_header_lines, data_vector, n_data_points, ierr)
+        CHARACTER(len=*), INTENT(in) :: filename
+        INTEGER(ik), INTENT(in) :: n_header_lines
+        REAL(rk), DIMENSION(:), INTENT(in) :: data_vector
+        INTEGER(ik), INTENT(in) :: n_data_points
+        INTEGER(ik), INTENT(out) :: ierr
+
+        ! Local variables
+        INTEGER(ik) :: i
+        INTEGER(ik) :: unit_in, unit_out
+        INTEGER(ik) :: iostat_val
+        CHARACTER(len=256) :: line_buffer
+        CHARACTER(len=256) :: temp_filename
+
+        ierr = 0
+        temp_filename = TRIM(filename)//'.tmp'
+
+        ! Validation
+        IF (n_data_points /= SIZE(data_vector)) THEN
+            ierr = ERR_SCALAR_INVALID_COUNT
+            CALL log_error(ERR_SCALAR_INVALID_COUNT, 'Mismatch between n_data_points and array size')
+            RETURN
+        END IF
+
+        ! Get file units
+        CALL get_unit(unit_in)
+        CALL get_unit(unit_out)
+
+        ! Open original file for reading
+        OPEN(unit=unit_in, file=TRIM(filename), status='old', action='read', iostat=iostat_val)
+        IF (iostat_val /= 0) THEN
+            ierr = ERR_SCALAR_OPEN
+            CALL log_error(ERR_SCALAR_OPEN, 'File: '//TRIM(filename))
+            RETURN
+        END IF
+
+        ! Open temporary file for writing
+        OPEN(unit=unit_out, file=TRIM(temp_filename), status='replace', action='write', iostat=iostat_val)
+        IF (iostat_val /= 0) THEN
+            ierr = ERR_SCALAR_OPEN
+            CALL log_error(ERR_SCALAR_OPEN, 'File: '//TRIM(temp_filename))
+            CLOSE(unit_in)
+            RETURN
+        END IF
+
+        ! 1. Copy header lines
+        DO i = 1, n_header_lines
+            READ(unit_in, '(A)', iostat=iostat_val) line_buffer
+            IF (iostat_val /= 0) THEN
+                ierr = ERR_SCALAR_HEADER
+                CALL log_error(ERR_SCALAR_HEADER, 'File: '//TRIM(filename))
+                CLOSE(unit_in)
+                CLOSE(unit_out)
+                RETURN
+            END IF
+            WRITE(unit_out, '(A)') TRIM(line_buffer)
+        END DO
+
+        ! 2. Copy the count line
+        READ(unit_in, '(A)', iostat=iostat_val) line_buffer
+        IF (iostat_val /= 0) THEN
+            ierr = ERR_SCALAR_COUNT
+            CALL log_error(ERR_SCALAR_COUNT, 'File: '//TRIM(filename))
+            CLOSE(unit_in)
+            CLOSE(unit_out)
+            RETURN
+        END IF
+        WRITE(unit_out, '(A)') TRIM(line_buffer)
+
+        ! 3. Copy the opening parenthesis line
+        READ(unit_in, '(A)', iostat=iostat_val) line_buffer
+        IF (iostat_val /= 0) THEN
+            ierr = ERR_SCALAR_SKIP
+            CALL log_error(ERR_SCALAR_SKIP, 'File: '//TRIM(filename))
+            CLOSE(unit_in)
+            CLOSE(unit_out)
+            RETURN
+        END IF
+        WRITE(unit_out, '(A)') TRIM(line_buffer)
+
+        ! 4. Skip old data in input file
+        DO i = 1, n_data_points
+            READ(unit_in, *, iostat=iostat_val)
+            IF (iostat_val /= 0) THEN
+                ierr = ERR_SCALAR_READ
+                CALL log_error(ERR_SCALAR_READ, 'File: '//TRIM(filename))
+                CLOSE(unit_in)
+                CLOSE(unit_out)
+                RETURN
+            END IF
+        END DO
+
+        ! 5. Write new data values
+        DO i = 1, n_data_points
+            WRITE(unit_out, '(ES23.15E3)') data_vector(i)
+        END DO
+
+        ! 6. Copy remaining lines (closing parenthesis and any footer)
+        DO
+            READ(unit_in, '(A)', iostat=iostat_val) line_buffer
+            IF (iostat_val /= 0) EXIT  ! End of file
+            WRITE(unit_out, '(A)') TRIM(line_buffer)
+        END DO
+
+        ! Close files
+        CLOSE(unit_in)
+        CLOSE(unit_out)
+
+        ! Replace original file with temporary file
+        CALL RENAME(TRIM(temp_filename), TRIM(filename))
+
+    END SUBROUTINE write_OF_scalars
+
+    ! Subroutine to write vector data back to OpenFOAM file (preserving header and footer)
+    SUBROUTINE write_OF_vectors(filename, n_header_lines, x_vector, y_vector, z_vector, n_data_points, ierr)
+        CHARACTER(len=*), INTENT(in) :: filename
+        INTEGER(ik), INTENT(in) :: n_header_lines
+        REAL(rk), DIMENSION(:), INTENT(in) :: x_vector, y_vector, z_vector
+        INTEGER(ik), INTENT(in) :: n_data_points
+        INTEGER(ik), INTENT(out) :: ierr
+
+        ! Local variables
+        INTEGER(ik) :: i
+        INTEGER(ik) :: unit_in, unit_out
+        INTEGER(ik) :: iostat_val
+        CHARACTER(len=256) :: line_buffer
+        CHARACTER(len=256) :: temp_filename
+
+        ierr = 0
+        temp_filename = TRIM(filename)//'.tmp'
+
+        ! Validation
+        IF (n_data_points /= SIZE(x_vector) .OR. &
+            n_data_points /= SIZE(y_vector) .OR. &
+            n_data_points /= SIZE(z_vector)) THEN
+            ierr = ERR_VECTOR_INVALID_COUNT
+            CALL log_error(ERR_VECTOR_INVALID_COUNT, 'Mismatch between n_data_points and array sizes')
+            RETURN
+        END IF
+
+        ! Get file units
+        CALL get_unit(unit_in)
+        CALL get_unit(unit_out)
+
+        ! Open original file for reading
+        OPEN(unit=unit_in, file=TRIM(filename), status='old', action='read', iostat=iostat_val)
+        IF (iostat_val /= 0) THEN
+            ierr = ERR_VECTOR_OPEN
+            CALL log_error(ERR_VECTOR_OPEN, 'File: '//TRIM(filename))
+            RETURN
+        END IF
+
+        ! Open temporary file for writing
+        OPEN(unit=unit_out, file=TRIM(temp_filename), status='replace', action='write', iostat=iostat_val)
+        IF (iostat_val /= 0) THEN
+            ierr = ERR_VECTOR_OPEN
+            CALL log_error(ERR_VECTOR_OPEN, 'File: '//TRIM(temp_filename))
+            CLOSE(unit_in)
+            RETURN
+        END IF
+
+        ! 1. Copy header lines
+        DO i = 1, n_header_lines
+            READ(unit_in, '(A)', iostat=iostat_val) line_buffer
+            IF (iostat_val /= 0) THEN
+                ierr = ERR_VECTOR_HEADER
+                CALL log_error(ERR_VECTOR_HEADER, 'File: '//TRIM(filename))
+                CLOSE(unit_in)
+                CLOSE(unit_out)
+                RETURN
+            END IF
+            WRITE(unit_out, '(A)') TRIM(line_buffer)
+        END DO
+
+        ! 2. Copy the count line
+        READ(unit_in, '(A)', iostat=iostat_val) line_buffer
+        IF (iostat_val /= 0) THEN
+            ierr = ERR_VECTOR_COUNT
+            CALL log_error(ERR_VECTOR_COUNT, 'File: '//TRIM(filename))
+            CLOSE(unit_in)
+            CLOSE(unit_out)
+            RETURN
+        END IF
+        WRITE(unit_out, '(A)') TRIM(line_buffer)
+
+        ! 3. Copy the opening parenthesis line
+        READ(unit_in, '(A)', iostat=iostat_val) line_buffer
+        IF (iostat_val /= 0) THEN
+            ierr = ERR_VECTOR_SKIP
+            CALL log_error(ERR_VECTOR_SKIP, 'File: '//TRIM(filename))
+            CLOSE(unit_in)
+            CLOSE(unit_out)
+            RETURN
+        END IF
+        WRITE(unit_out, '(A)') TRIM(line_buffer)
+
+        ! 4. Skip old data in input file
+        DO i = 1, n_data_points
+            READ(unit_in, *, iostat=iostat_val)
+            IF (iostat_val /= 0) THEN
+                ierr = ERR_VECTOR_READ
+                CALL log_error(ERR_VECTOR_READ, 'File: '//TRIM(filename))
+                CLOSE(unit_in)
+                CLOSE(unit_out)
+                RETURN
+            END IF
+        END DO
+
+        ! 5. Write new vector data with parentheses
+        DO i = 1, n_data_points
+            WRITE(unit_out, '(A,ES23.15E3,A,ES23.15E3,A,ES23.15E3,A)') &
+                '(', x_vector(i), ' ', y_vector(i), ' ', z_vector(i), ')'
+        END DO
+
+        ! 6. Copy remaining lines (closing parenthesis and any footer)
+        DO
+            READ(unit_in, '(A)', iostat=iostat_val) line_buffer
+            IF (iostat_val /= 0) EXIT  ! End of file
+            WRITE(unit_out, '(A)') TRIM(line_buffer)
+        END DO
+
+        ! Close files
+        CLOSE(unit_in)
+        CLOSE(unit_out)
+
+        ! Replace original file with temporary file
+        CALL RENAME(TRIM(temp_filename), TRIM(filename))
+
+    END SUBROUTINE write_OF_vectors
+
 END MODULE OpenFOAM_IO
