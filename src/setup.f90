@@ -14,8 +14,9 @@ CONTAINS
 
         NAMELIST / Setup / N_HEADER_grid, &
                            N_HEADER_var, &
-                           file_grid, &
-                           file_var, &
+                           file_grid_in, &
+                           file_var_in, &
+                           file_var_out, &
                            output_file, &
                            COMMAND_RUN, &
                            dist_mag, &

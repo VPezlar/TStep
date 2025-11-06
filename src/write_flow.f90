@@ -21,36 +21,36 @@ CONTAINS
 
         error_status = 0
 
-        WRITE(*,*) 'Attempting to write data to:', TRIM(file_var)
+        WRITE(*,*) 'Attempting to write data to:', TRIM(file_var_out)
         WRITE(*,*) 'Flowfield format:', TRIM(flow_format)
 
         IF (flow_format == 'OpenFOAM') THEN
             ! Write Flowfield Variables
-            CALL write_OF_scalars(TRIM(file_var)//'p', N_HEADER_var, p_out, data_count, error_status)
+            CALL write_OF_scalars(TRIM(file_var_out)//'p', N_HEADER_var, p_out, data_count, error_status)
             IF (error_status /= 0) THEN
                 error_status = ERR_FLOW_PRESSURE
-                CALL log_error(ERR_FLOW_PRESSURE, 'File: '//TRIM(file_var)//'p')
+                CALL log_error(ERR_FLOW_PRESSURE, 'File: '//TRIM(file_var_out)//'p')
                 RETURN
             END IF
 
-            CALL write_OF_scalars(TRIM(file_var)//'rho', N_HEADER_var, rho_out, data_count, error_status)
+            CALL write_OF_scalars(TRIM(file_var_out)//'rho', N_HEADER_var, rho_out, data_count, error_status)
             IF (error_status /= 0) THEN
                 error_status = ERR_FLOW_DENSITY
-                CALL log_error(ERR_FLOW_DENSITY, 'File: '//TRIM(file_var)//'rho')
+                CALL log_error(ERR_FLOW_DENSITY, 'File: '//TRIM(file_var_out)//'rho')
                 RETURN
             END IF
 
-            CALL write_OF_scalars(TRIM(file_var)//'T', N_HEADER_var, T_out, data_count, error_status)
+            CALL write_OF_scalars(TRIM(file_var_out)//'T', N_HEADER_var, T_out, data_count, error_status)
             IF (error_status /= 0) THEN
                 error_status = ERR_FLOW_TEMPERATURE
-                CALL log_error(ERR_FLOW_TEMPERATURE, 'File: '//TRIM(file_var)//'T')
+                CALL log_error(ERR_FLOW_TEMPERATURE, 'File: '//TRIM(file_var_out)//'T')
                 RETURN
             END IF
 
-            CALL write_OF_vectors(TRIM(file_var)//'U', N_HEADER_grid, U_out, V_out, W_out, data_count, error_status)
+            CALL write_OF_vectors(TRIM(file_var_out)//'U', N_HEADER_grid, U_out, V_out, W_out, data_count, error_status)
             IF (error_status /= 0) THEN
                 error_status = ERR_FLOW_VELOCITY
-                CALL log_error(ERR_FLOW_VELOCITY, 'File: '//TRIM(file_var)//'U')
+                CALL log_error(ERR_FLOW_VELOCITY, 'File: '//TRIM(file_var_out)//'U')
                 RETURN
             END IF
 

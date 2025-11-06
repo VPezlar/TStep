@@ -22,45 +22,45 @@ CONTAINS
 
         error_status = 0
 
-        WRITE(*,*) 'Attempting to read data from:', TRIM(file_grid)
-        WRITE(*,*) 'Attempting to read data from:', TRIM(file_var)
+        WRITE(*,*) 'Attempting to read data from:', TRIM(file_grid_in)
+        WRITE(*,*) 'Attempting to read data from:', TRIM(file_var_in)
         WRITE(*,*) 'Flowfield format:', TRIM(flow_format)
 
         IF (flow_format == 'OpenFOAM') THEN
             ! Read Flowfield Variables
-            CALL read_OF_scalars(TRIM(file_var)//'p', N_HEADER_var, p_in, data_count, error_status)
+            CALL read_OF_scalars(TRIM(file_var_in)//'p', N_HEADER_var, p_in, data_count, error_status)
             IF (error_status /= 0) THEN
                 error_status = ERR_FLOW_PRESSURE
-                CALL log_error(ERR_FLOW_PRESSURE, 'File: '//TRIM(file_var)//'p')
+                CALL log_error(ERR_FLOW_PRESSURE, 'File: '//TRIM(file_var_in)//'p')
                 RETURN
             END IF
 
-            CALL read_OF_scalars(TRIM(file_var)//'rho', N_HEADER_var, rho_in, data_count, error_status)
+            CALL read_OF_scalars(TRIM(file_var_in)//'rho', N_HEADER_var, rho_in, data_count, error_status)
             IF (error_status /= 0) THEN
                 error_status = ERR_FLOW_DENSITY
-                CALL log_error(ERR_FLOW_DENSITY, 'File: '//TRIM(file_var)//'rho')
+                CALL log_error(ERR_FLOW_DENSITY, 'File: '//TRIM(file_var_in)//'rho')
                 RETURN
             END IF
 
-            CALL read_OF_scalars(TRIM(file_var)//'T', N_HEADER_var, T_in, data_count, error_status)
+            CALL read_OF_scalars(TRIM(file_var_in)//'T', N_HEADER_var, T_in, data_count, error_status)
             IF (error_status /= 0) THEN
                 error_status = ERR_FLOW_TEMPERATURE
-                CALL log_error(ERR_FLOW_TEMPERATURE, 'File: '//TRIM(file_var)//'T')
+                CALL log_error(ERR_FLOW_TEMPERATURE, 'File: '//TRIM(file_var_in)//'T')
                 RETURN
             END IF
 
-            CALL read_OF_vectors(TRIM(file_var)//'U', N_HEADER_grid, U_in, V_in, W_in, data_count, error_status)
+            CALL read_OF_vectors(TRIM(file_var_in)//'U', N_HEADER_grid, U_in, V_in, W_in, data_count, error_status)
             IF (error_status /= 0) THEN
                 error_status = ERR_FLOW_VELOCITY
-                CALL log_error(ERR_FLOW_VELOCITY, 'File: '//TRIM(file_var)//'U')
+                CALL log_error(ERR_FLOW_VELOCITY, 'File: '//TRIM(file_var_in)//'U')
                 RETURN
             END IF
 
             ! Read Grid Coordinates (Cell Centers)
-            CALL read_OF_vectors(TRIM(file_grid), N_HEADER_grid, Xgrid, Ygrid, Zgrid, data_count, error_status)
+            CALL read_OF_vectors(TRIM(file_grid_in), N_HEADER_grid, Xgrid, Ygrid, Zgrid, data_count, error_status)
             IF (error_status /= 0) THEN
                 error_status = ERR_FLOW_GRID
-                CALL log_error(ERR_FLOW_GRID, 'File: '//TRIM(file_grid))
+                CALL log_error(ERR_FLOW_GRID, 'File: '//TRIM(file_grid_in))
                 RETURN
             END IF
 
