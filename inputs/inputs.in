@@ -1,11 +1,27 @@
-&Setup
-output_file           = '../output/flowfield.csv',
-dist_mag              = 1.0d-3
-flow_format           = 'OpenFOAM',
-COMMAND_RUN           = 'cd /home/vojtech-p/work/openfoam/OpenFOAM-v2506/tutorials/compressible/rhoCentralFoam/wedge15Ma5/ && rhoCentralFoam > /dev/null 2>&1',
-N_HEADER_grid         = 21,
-N_HEADER_var          = 21,
-file_grid_in          = '/home/vojtech-p/work/openfoam/OpenFOAM-v2506/tutorials/compressible/rhoCentralFoam/wedge15Ma5/0/C',
-file_var_in           = '/home/vojtech-p/work/openfoam/OpenFOAM-v2506/tutorials/compressible/rhoCentralFoam/wedge15Ma5/0.2/',
-file_var_out          = '/home/vojtech-p/work/openfoam/OpenFOAM-v2506/tutorials/compressible/rhoCentralFoam/wedge15Ma5/0.1/',
+! ============================================================================
+! TStep Configuration File
+! ============================================================================
+! This file contains configuration settings for the TStep time-stepping
+! framework. Settings are organized into separate namelists:
+!   - General: solver-agnostic settings
+!   - OpenFOAM: OpenFOAM-specific settings
+! Future solver support can be added by creating additional namelists
+! (e.g., &SU2, &CGNS, etc.)
+! ============================================================================
+
+! General Settings (solver-agnostic)
+&General
+    flow_format = 'OpenFOAM',     ! Solver format: 'OpenFOAM', 'SU2', etc.
+    output_file = '../output/flowfield.csv',  ! Path to CSV output file
+    dist_mag    = 1.0d-3,         ! Magnitude for random disturbance scaling
+    COMMAND_RUN = 'cd /home/vojtech-p/work/openfoam/OpenFOAM-v2506/tutorials/compressible/rhoCentralFoam/wedge15Ma5/ && rhoCentralFoam > /dev/null 2>&1',
+/
+
+! OpenFOAM-Specific Settings
+&OpenFOAM
+    N_HEADER_grid = 21,           ! Number of header lines in grid coordinate file
+    N_HEADER_var  = 21,           ! Number of header lines in variable files
+    file_grid_in  = '/home/vojtech-p/work/openfoam/OpenFOAM-v2506/tutorials/compressible/rhoCentralFoam/wedge15Ma5/0/C',
+    file_var_in   = '/home/vojtech-p/work/openfoam/OpenFOAM-v2506/tutorials/compressible/rhoCentralFoam/wedge15Ma5/0.2/',
+    file_var_out  = '/home/vojtech-p/work/openfoam/OpenFOAM-v2506/tutorials/compressible/rhoCentralFoam/wedge15Ma5/0.1/',
 /

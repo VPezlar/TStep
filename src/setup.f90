@@ -12,15 +12,18 @@ CONTAINS
         INTEGER(ik) :: unit_num, status_id
         CHARACTER(len=400) :: message
 
-        NAMELIST / Setup / N_HEADER_grid, &
-                           N_HEADER_var, &
-                           file_grid_in, &
-                           file_var_in, &
-                           file_var_out, &
-                           output_file, &
-                           COMMAND_RUN, &
-                           dist_mag, &
-                           flow_format
+        ! General namelist (solver-agnostic)
+        NAMELIST / General / flow_format, &
+                             output_file, &
+                             dist_mag, &
+                             COMMAND_RUN
+
+        ! OpenFOAM-specific namelist
+        NAMELIST / OpenFOAM / N_HEADER_grid, &
+                              N_HEADER_var, &
+                              file_grid_in, &
+                              file_var_in, &
+                              file_var_out
 
         ierr = 0
         CALL get_unit(unit_num)
@@ -32,11 +35,31 @@ CONTAINS
             RETURN
         END IF
 
-        READ(unit_num, nml=Setup, iostat=status_id, iomsg=message)
-
+        ! Read General namelist
+        READ(unit_num, nml=General, iostat=status_id, iomsg=message)
         IF (status_id /= 0) THEN
             ierr = ERR_SETUP_NAMELIST_READ
-            CALL log_error(ERR_SETUP_NAMELIST_READ, TRIM(message))
+            CALL log_error(ERR_SETUP_NAMELIST_READ, 'General namelist - '//TRIM(message))
+            CLOSE(unit_num)
+            RETURN
+        END IF
+
+        ! Read solver-specific namelist based on flow_format
+        IF (TRIM(flow_format) == 'OpenFOAM') THEN
+            READ(unit_num, nml=OpenFOAM, iostat=status_id, iomsg=message)
+            IF (status_id /= 0) THEN
+                ierr = ERR_SETUP_NAMELIST_READ
+                CALL log_error(ERR_SETUP_NAMELIST_READ, 'OpenFOAM namelist - '//TRIM(message))
+                CLOSE(unit_num)
+                RETURN
+            END IF
+        ELSE
+            ! Future solvers can be added here
+            ! ELSE IF (TRIM(flow_format) == 'SU2') THEN
+            !     READ(unit_num, nml=SU2, iostat=status_id, iomsg=message)
+            !     ...
+            ierr = ERR_SETUP_INVALID_PARAM
+            CALL log_error(ERR_SETUP_INVALID_PARAM, 'Unsupported flow_format: '//TRIM(flow_format))
             CLOSE(unit_num)
             RETURN
         END IF

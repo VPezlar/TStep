@@ -145,35 +145,55 @@ The modular design allows for easy extension to other solvers:
 
 **Adding a new solver** requires:
 1. Implement solver-specific I/O module (similar to `OpenFOAM_IO.f90`)
-2. Add format option to configuration
-3. Update `read_flow.f90` with new format case
+2. Add solver-specific variables to `variables.f90` module
+3. Create new namelist in `setup.f90` for solver-specific parameters
+4. Add solver-specific section to `inputs/inputs.in` configuration file
+5. Add conditional logic in `setup.f90` to read the new namelist based on `flow_format`
+6. Update `read_flow.f90` and `write_flow.f90` with new format cases
 
 ## Configuration
 
-The program reads configuration from `inputs/inputs.in` using a Fortran namelist format:
+The program reads configuration from `inputs/inputs.in` using Fortran namelist format. The configuration is organized into **solver-agnostic** and **solver-specific** sections for better maintainability and extensibility.
 
 ```fortran
-&Setup
-output_file         = '../output/flowfield.csv',
-flow_format         = 'OpenFOAM',
-COMMAND_RUN         = 'cd /path/to/case && rhoCentralFoam',
-dist_mag            = 1.0d-6,
-N_HEADER_grid       = 21,
-N_HEADER_var        = 21,
-file_grid_in        = '/path/to/openfoam/case/0/C',
-file_var_in         = '/path/to/openfoam/case/timestep/',
-file_var_out        = '/path/to/openfoam/case/output_timestep/',
+! General Settings (solver-agnostic)
+&General
+    flow_format = 'OpenFOAM',     ! Solver format: 'OpenFOAM', 'SU2', etc.
+    output_file = '../output/flowfield.csv',
+    dist_mag    = 1.0d-6,
+    COMMAND_RUN = 'cd /path/to/case && rhoCentralFoam',
+/
+
+! OpenFOAM-Specific Settings
+&OpenFOAM
+    N_HEADER_grid = 21,
+    N_HEADER_var  = 21,
+    file_grid_in  = '/path/to/openfoam/case/0/C',
+    file_var_in   = '/path/to/openfoam/case/timestep/',
+    file_var_out  = '/path/to/openfoam/case/output_timestep/',
 /
 ```
 
-### Configuration Parameters
+### Configuration Structure
+
+The configuration file uses multiple namelists:
+- **`&General`**: Solver-agnostic parameters used by all solvers
+- **`&OpenFOAM`**: OpenFOAM-specific parameters (only read when `flow_format='OpenFOAM'`)
+- Future solvers can add their own namelists (e.g., `&SU2`, `&CGNS`)
+
+### General Parameters
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `output_file` | string | Path to output CSV file |
 | `flow_format` | string | Flow solver format ('OpenFOAM', extensible to 'SU2', 'CGNS', etc.) |
-| `COMMAND_RUN` | string | External command to execute CFD simulation |
+| `output_file` | string | Path to output CSV file |
 | `dist_mag` | real | Magnitude for random disturbance vector scaling |
+| `COMMAND_RUN` | string | External command to execute CFD simulation |
+
+### OpenFOAM-Specific Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
 | `N_HEADER_grid` | integer | Number of header lines in grid coordinate file |
 | `N_HEADER_var` | integer | Number of header lines in variable files |
 | `file_grid_in` | string | Path to OpenFOAM cell center coordinate file (typically `C`) |
@@ -350,7 +370,10 @@ Global variables module containing:
 
 ### setup
 Configuration reading module with subroutines:
-- `configurationRead(ierr)`: Reads namelist from `inputs/inputs.in`
+- `configurationRead(ierr)`: Reads namelists from `inputs/inputs.in`
+  - Reads `&General` namelist for solver-agnostic settings
+  - Reads solver-specific namelist based on `flow_format` (e.g., `&OpenFOAM`)
+  - Validates `flow_format` and returns error for unsupported solvers
 - `get_unit(u)`: Returns an available file unit number (10-99)
 
 ### OpenFOAM_IO
