@@ -36,7 +36,8 @@ While TStep is designed for general CFD solver compatibility, the current implem
 ### ✅ Implemented
 - **External command execution**: Run CFD simulations (OpenFOAM, or any solver) via shell commands
 - **Random disturbance generation**: Create normalized, scaled random perturbation vectors for sensitivity analysis
-- **OpenFOAM I/O**: Read scalar fields (pressure, density, temperature) and vector fields (velocity, coordinates)
+- **OpenFOAM I/O**: Read and write scalar fields (pressure, density, temperature) and vector fields (velocity, coordinates)
+- **Flow field perturbation**: Apply perturbations to flow fields and write back to OpenFOAM format
 - **Data export**: Write processed data to CSV format
 - **Flexible configuration**: Namelist-based input system
 - **Robust error handling**: Centralized hierarchical error management system
@@ -64,8 +65,9 @@ TStep/
 │   ├── call_CFD.f90          # External command execution
 │   ├── random_disturbance.f90 # Random perturbation generation
 │   ├── read_flow.f90         # Flow field reading module
+│   ├── write_flow.f90        # Flow field writing module (OpenFOAM format)
 │   ├── write_output.f90      # CSV output writing
-│   └── OpenFOAM_IO.f90       # OpenFOAM file I/O routines
+│   └── OpenFOAM_IO.f90       # OpenFOAM file I/O routines (read & write)
 ├── inputs/           # Input configuration files
 ├── output/           # Output CSV files
 ├── bin/              # Compiled executables
@@ -99,6 +101,12 @@ main.f90
   │   ├─ setup
   │   ├─ OpenFOAM_IO
   │   └─ error_handling
+  ├─ write_flow
+  │   ├─ accuracy
+  │   ├─ variables
+  │   ├─ setup
+  │   ├─ OpenFOAM_IO
+  │   └─ error_handling
   └─ write_output
       ├─ accuracy
       ├─ variables
@@ -116,6 +124,7 @@ gfortran -c src/call_CFD.f90 -o obj/call_CFD.o -J mod/
 gfortran -c src/random_disturbance.f90 -o obj/random_disturbance.o -J mod/
 gfortran -c src/OpenFOAM_IO.f90 -o obj/OpenFOAM_IO.o -J mod/
 gfortran -c src/read_flow.f90 -o obj/read_flow.o -J mod/
+gfortran -c src/write_flow.f90 -o obj/write_flow.o -J mod/
 gfortran -c src/write_output.f90 -o obj/write_output.o -J mod/
 gfortran -c src/main.f90 -o obj/main.o -J mod/
 gfortran obj/*.o -o bin/TStep
@@ -124,7 +133,7 @@ gfortran obj/*.o -o bin/TStep
 ## Solver Compatibility
 
 ### Current: OpenFOAM
-Fully supported for development and testing. Reads standard OpenFOAM file formats:
+Fully supported for development and testing. Reads and writes standard OpenFOAM file formats:
 - Scalar fields: `p`, `rho`, `T`
 - Vector fields: `U`, cell coordinates `C`
 
@@ -151,8 +160,9 @@ COMMAND_RUN         = 'cd /path/to/case && rhoCentralFoam',
 dist_mag            = 1.0d-6,
 N_HEADER_grid       = 21,
 N_HEADER_var        = 21,
-file_grid           = '/path/to/openfoam/case/0/C',
-file_var            = '/path/to/openfoam/case/timestep/',
+file_grid_in        = '/path/to/openfoam/case/0/C',
+file_var_in         = '/path/to/openfoam/case/timestep/',
+file_var_out        = '/path/to/openfoam/case/output_timestep/',
 /
 ```
 
@@ -166,8 +176,9 @@ file_var            = '/path/to/openfoam/case/timestep/',
 | `dist_mag` | real | Magnitude for random disturbance vector scaling |
 | `N_HEADER_grid` | integer | Number of header lines in grid coordinate file |
 | `N_HEADER_var` | integer | Number of header lines in variable files |
-| `file_grid` | string | Path to OpenFOAM cell center coordinate file (typically `C`) |
-| `file_var` | string | Path prefix to OpenFOAM time directory containing field variables |
+| `file_grid_in` | string | Path to OpenFOAM cell center coordinate file (typically `C`) |
+| `file_var_in` | string | Path prefix to OpenFOAM time directory containing input field variables |
+| `file_var_out` | string | Path prefix to OpenFOAM time directory for writing output field variables |
 
 ## Input File Format
 
@@ -329,8 +340,9 @@ Defines precision for integer and real variables using ISO Fortran intrinsic typ
 Global variables module containing:
 - `N_HEADER_grid`: Number of header lines in grid file
 - `N_HEADER_var`: Number of header lines in variable files
-- `file_grid`: Grid coordinate file path
-- `file_var`: Variable file path prefix
+- `file_grid_in`: Input grid coordinate file path
+- `file_var_in`: Input variable file path prefix
+- `file_var_out`: Output variable file path prefix
 - `output_file`: Output CSV file path
 - `flow_format`: Flow solver format identifier
 - `COMMAND_RUN`: External command string
@@ -345,6 +357,8 @@ Configuration reading module with subroutines:
 Low-level I/O routines for OpenFOAM file formats:
 - `read_OF_scalars(filename, n_header_lines, data_vector, n_data_points, ierr)`: Reads scalar field data
 - `read_OF_vectors(filename, n_header_lines, x_vector, y_vector, z_vector, n_data_points, ierr)`: Reads vector field data
+- `write_OF_scalars(filename, n_header_lines, data_vector, n_data_points, ierr)`: Writes scalar field data preserving header/footer
+- `write_OF_vectors(filename, n_header_lines, x_vector, y_vector, z_vector, n_data_points, ierr)`: Writes vector field data preserving header/footer
 
 #### Error Codes
 **Scalar Read Errors:**
@@ -371,11 +385,21 @@ High-level flow field reading module:
 - `read_flowfield(rho_in, p_in, T_in, U_in, V_in, W_in, Xgrid, Ygrid, Zgrid, data_count, error_status)`: Orchestrates reading of all flow field data
 
 Reads the following files:
-- `{OF_file_var}p`: Pressure field
-- `{OF_file_var}rho`: Density field
-- `{OF_file_var}T`: Temperature field
-- `{OF_file_var}U`: Velocity field
-- `{OF_file_grid}`: Cell center coordinates
+- `{file_var_in}p`: Pressure field
+- `{file_var_in}rho`: Density field
+- `{file_var_in}T`: Temperature field
+- `{file_var_in}U`: Velocity field
+- `{file_grid_in}`: Cell center coordinates
+
+### write_flow
+High-level flow field writing module:
+- `write_flowfield(rho_out, p_out, T_out, U_out, V_out, W_out, data_count, error_status)`: Orchestrates writing of all flow field data back to OpenFOAM format
+
+Writes the following files:
+- `{file_var_out}p`: Pressure field
+- `{file_var_out}rho`: Density field
+- `{file_var_out}T`: Temperature field
+- `{file_var_out}U`: Velocity field
 
 ### write_output
 Output writing module:
@@ -389,13 +413,16 @@ Main program that:
 2. Executes external CFD command via `run_simulation()` if configured
 3. Reads flow field data via `read_flowfield()`
 4. Generates random disturbance vector via `initial_disturbance()`
-5. Writes results to CSV via `write_flowfield_data()`
-6. Performs cleanup of all allocated memory
-7. Returns exit codes:
+5. Applies perturbations to flow fields and writes perturbed data to OpenFOAM format via `write_flowfield()`
+6. Writes original (unperturbed) results to CSV via `write_flowfield_data()`
+7. Performs cleanup of all allocated memory
+8. Returns exit codes:
    - `0`: Success
-   - `1`: Flow field read failure
-   - `2`: Output write failure
-   - `3`: Disturbance generation failure
+   - `1`: Configuration read failure
+   - `2`: External command failure
+   - `3`: Flow field read failure
+   - `4`: Disturbance generation failure
+   - `5`: Output write failure
 
 ## Error Handling
 
