@@ -2,7 +2,7 @@
 output_file           = '../output/flowfield.csv',
 dist_mag              = 1.0d-3
 flow_format           = 'OpenFOAM',
-COMMAND_RUN           = 'cd /home/vojtech-p/work/openfoam/OpenFOAM-v2506/tutorials/compressible/rhoCentralFoam/wedge15Ma5/ && rhoCentralFoam',
+COMMAND_RUN           = 'cd /home/vojtech-p/work/openfoam/OpenFOAM-v2506/tutorials/compressible/rhoCentralFoam/wedge15Ma5/ && rhoCentralFoam && sync && cd -',
 N_HEADER_grid         = 21,
 N_HEADER_var          = 21,
 file_grid_in          = '/home/vojtech-p/work/openfoam/OpenFOAM-v2506/tutorials/compressible/rhoCentralFoam/wedge15Ma5/0/C',
