@@ -298,7 +298,14 @@ CONTAINS
                 CLOSE(unit_out)
                 RETURN
             END IF
-            WRITE(unit_out, '(A)') TRIM(line_buffer)
+            WRITE(unit_out, '(A)', iostat=iostat_val) TRIM(line_buffer)
+            IF (iostat_val /= 0) THEN
+                ierr = ERR_SCALAR_HEADER
+                CALL log_error(ERR_SCALAR_HEADER, 'Write failed: '//TRIM(temp_filename))
+                CLOSE(unit_in)
+                CLOSE(unit_out)
+                RETURN
+            END IF
         END DO
 
         ! 2. Copy the count line
@@ -310,7 +317,14 @@ CONTAINS
             CLOSE(unit_out)
             RETURN
         END IF
-        WRITE(unit_out, '(A)') TRIM(line_buffer)
+        WRITE(unit_out, '(A)', iostat=iostat_val) TRIM(line_buffer)
+        IF (iostat_val /= 0) THEN
+            ierr = ERR_SCALAR_COUNT
+            CALL log_error(ERR_SCALAR_COUNT, 'Write failed: '//TRIM(temp_filename))
+            CLOSE(unit_in)
+            CLOSE(unit_out)
+            RETURN
+        END IF
 
         ! 3. Copy the opening parenthesis line
         READ(unit_in, '(A)', iostat=iostat_val) line_buffer
@@ -321,7 +335,14 @@ CONTAINS
             CLOSE(unit_out)
             RETURN
         END IF
-        WRITE(unit_out, '(A)') TRIM(line_buffer)
+        WRITE(unit_out, '(A)', iostat=iostat_val) TRIM(line_buffer)
+        IF (iostat_val /= 0) THEN
+            ierr = ERR_SCALAR_SKIP
+            CALL log_error(ERR_SCALAR_SKIP, 'Write failed: '//TRIM(temp_filename))
+            CLOSE(unit_in)
+            CLOSE(unit_out)
+            RETURN
+        END IF
 
         ! 4. Skip old data in input file
         DO i = 1, n_data_points
@@ -337,22 +358,42 @@ CONTAINS
 
         ! 5. Write new data values
         DO i = 1, n_data_points
-            WRITE(unit_out, '(ES23.15E3)') data_vector(i)
+            WRITE(unit_out, '(ES23.15E3)', iostat=iostat_val) data_vector(i)
+            IF (iostat_val /= 0) THEN
+                ierr = ERR_SCALAR_READ
+                CALL log_error(ERR_SCALAR_READ, 'Write data failed: '//TRIM(temp_filename))
+                CLOSE(unit_in)
+                CLOSE(unit_out)
+                RETURN
+            END IF
         END DO
 
         ! 6. Copy remaining lines (closing parenthesis and any footer)
         DO
             READ(unit_in, '(A)', iostat=iostat_val) line_buffer
             IF (iostat_val /= 0) EXIT  ! End of file
-            WRITE(unit_out, '(A)') TRIM(line_buffer)
+            WRITE(unit_out, '(A)', iostat=iostat_val) TRIM(line_buffer)
+            IF (iostat_val /= 0) THEN
+                ierr = ERR_SCALAR_READ
+                CALL log_error(ERR_SCALAR_READ, 'Write footer failed: '//TRIM(temp_filename))
+                CLOSE(unit_in)
+                CLOSE(unit_out)
+                RETURN
+            END IF
         END DO
 
         ! Close files
         CLOSE(unit_in)
         CLOSE(unit_out)
 
-        ! Replace original file with temporary file
-        CALL RENAME(TRIM(temp_filename), TRIM(filename))
+        ! Replace original file with temporary file using system command
+        CALL EXECUTE_COMMAND_LINE('mv "'//TRIM(temp_filename)//'" "'//TRIM(filename)//'"', &
+                                   EXITSTAT=iostat_val, CMDSTAT=i)
+        IF (i /= 0 .OR. iostat_val /= 0) THEN
+            ierr = ERR_SCALAR_OPEN
+            CALL log_error(ERR_SCALAR_OPEN, 'Failed to rename temp file to: '//TRIM(filename))
+            RETURN
+        END IF
 
     END SUBROUTINE write_OF_scalars
 
@@ -414,7 +455,14 @@ CONTAINS
                 CLOSE(unit_out)
                 RETURN
             END IF
-            WRITE(unit_out, '(A)') TRIM(line_buffer)
+            WRITE(unit_out, '(A)', iostat=iostat_val) TRIM(line_buffer)
+            IF (iostat_val /= 0) THEN
+                ierr = ERR_VECTOR_HEADER
+                CALL log_error(ERR_VECTOR_HEADER, 'Write failed: '//TRIM(temp_filename))
+                CLOSE(unit_in)
+                CLOSE(unit_out)
+                RETURN
+            END IF
         END DO
 
         ! 2. Copy the count line
@@ -426,7 +474,14 @@ CONTAINS
             CLOSE(unit_out)
             RETURN
         END IF
-        WRITE(unit_out, '(A)') TRIM(line_buffer)
+        WRITE(unit_out, '(A)', iostat=iostat_val) TRIM(line_buffer)
+        IF (iostat_val /= 0) THEN
+            ierr = ERR_VECTOR_COUNT
+            CALL log_error(ERR_VECTOR_COUNT, 'Write failed: '//TRIM(temp_filename))
+            CLOSE(unit_in)
+            CLOSE(unit_out)
+            RETURN
+        END IF
 
         ! 3. Copy the opening parenthesis line
         READ(unit_in, '(A)', iostat=iostat_val) line_buffer
@@ -437,7 +492,14 @@ CONTAINS
             CLOSE(unit_out)
             RETURN
         END IF
-        WRITE(unit_out, '(A)') TRIM(line_buffer)
+        WRITE(unit_out, '(A)', iostat=iostat_val) TRIM(line_buffer)
+        IF (iostat_val /= 0) THEN
+            ierr = ERR_VECTOR_SKIP
+            CALL log_error(ERR_VECTOR_SKIP, 'Write failed: '//TRIM(temp_filename))
+            CLOSE(unit_in)
+            CLOSE(unit_out)
+            RETURN
+        END IF
 
         ! 4. Skip old data in input file
         DO i = 1, n_data_points
@@ -453,23 +515,43 @@ CONTAINS
 
         ! 5. Write new vector data with parentheses
         DO i = 1, n_data_points
-            WRITE(unit_out, '(A,ES23.15E3,A,ES23.15E3,A,ES23.15E3,A)') &
+            WRITE(unit_out, '(A,ES23.15E3,A,ES23.15E3,A,ES23.15E3,A)', iostat=iostat_val) &
                 '(', x_vector(i), ' ', y_vector(i), ' ', z_vector(i), ')'
+            IF (iostat_val /= 0) THEN
+                ierr = ERR_VECTOR_READ
+                CALL log_error(ERR_VECTOR_READ, 'Write data failed: '//TRIM(temp_filename))
+                CLOSE(unit_in)
+                CLOSE(unit_out)
+                RETURN
+            END IF
         END DO
 
         ! 6. Copy remaining lines (closing parenthesis and any footer)
         DO
             READ(unit_in, '(A)', iostat=iostat_val) line_buffer
             IF (iostat_val /= 0) EXIT  ! End of file
-            WRITE(unit_out, '(A)') TRIM(line_buffer)
+            WRITE(unit_out, '(A)', iostat=iostat_val) TRIM(line_buffer)
+            IF (iostat_val /= 0) THEN
+                ierr = ERR_VECTOR_READ
+                CALL log_error(ERR_VECTOR_READ, 'Write footer failed: '//TRIM(temp_filename))
+                CLOSE(unit_in)
+                CLOSE(unit_out)
+                RETURN
+            END IF
         END DO
 
         ! Close files
         CLOSE(unit_in)
         CLOSE(unit_out)
 
-        ! Replace original file with temporary file
-        CALL RENAME(TRIM(temp_filename), TRIM(filename))
+        ! Replace original file with temporary file using system command
+        CALL EXECUTE_COMMAND_LINE('mv "'//TRIM(temp_filename)//'" "'//TRIM(filename)//'"', &
+                                   EXITSTAT=iostat_val, CMDSTAT=i)
+        IF (i /= 0 .OR. iostat_val /= 0) THEN
+            ierr = ERR_VECTOR_OPEN
+            CALL log_error(ERR_VECTOR_OPEN, 'Failed to rename temp file to: '//TRIM(filename))
+            RETURN
+        END IF
 
     END SUBROUTINE write_OF_vectors
 

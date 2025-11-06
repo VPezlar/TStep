@@ -39,6 +39,7 @@ MODULE error_handling
     INTEGER(ik), PARAMETER :: ERR_VECTOR_ALLOC = 306
     INTEGER(ik), PARAMETER :: ERR_VECTOR_EOF = 307
     INTEGER(ik), PARAMETER :: ERR_VECTOR_FORMAT = 308
+    INTEGER(ik), PARAMETER :: ERR_VECTOR_READ = 309
     
     ! --- Flow Reading Module (400-499) ---
     INTEGER(ik), PARAMETER :: ERR_FLOW_PRESSURE = 401
@@ -74,6 +75,7 @@ MODULE error_handling
               ERR_SCALAR_INVALID_COUNT, ERR_SCALAR_ALLOC, ERR_SCALAR_SKIP, ERR_SCALAR_READ, &
               ERR_VECTOR_OPEN, ERR_VECTOR_HEADER, ERR_VECTOR_COUNT, ERR_VECTOR_SKIP, &
               ERR_VECTOR_INVALID_COUNT, ERR_VECTOR_ALLOC, ERR_VECTOR_EOF, ERR_VECTOR_FORMAT, &
+              ERR_VECTOR_READ, &
               ERR_FLOW_PRESSURE, ERR_FLOW_DENSITY, ERR_FLOW_TEMPERATURE, &
               ERR_FLOW_VELOCITY, ERR_FLOW_GRID, ERR_FLOW_UNKNOWN_FORMAT, &
               ERR_OUTPUT_FILE_OPEN, ERR_OUTPUT_WRITE_HEADER, ERR_OUTPUT_WRITE_DATA, &
@@ -173,6 +175,8 @@ CONTAINS
                 description = "Premature end of file in vector data"
             CASE (ERR_VECTOR_FORMAT)
                 description = "Vector data format error"
+            CASE (ERR_VECTOR_READ)
+                description = "Error reading vector data"
                 
             ! Flow reading errors
             CASE (ERR_FLOW_PRESSURE)

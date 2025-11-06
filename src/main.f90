@@ -72,18 +72,18 @@ PROGRAM main
 
         ! --- Read Flowfield ---
     ! Read flowfield data
-    CALL write_flowfield(rho_in + initial_disturbance, &
-                         p_in + initial_disturbance, &
-                         T_in + initial_disturbance, &
-                         U_in + initial_disturbance, &
-                         V_in + initial_disturbance, &
-                         W_in + initial_disturbance, &
+    CALL write_flowfield(rho_in + pert_0, &
+                         p_in + pert_0, &
+                         T_in + pert_0, &
+                         U_in + pert_0, &
+                         V_in + pert_0, &
+                         W_in + pert_0, &
                          data_count, error_status)
 
     IF (error_status /= 0) THEN
-        CALL log_error(ERR_MAIN_READ_FLOW)
+        CALL log_error(ERR_MAIN_WRITE_OUTPUT)
         CALL cleanup_allocations()
-        STOP ERR_MAIN_READ_FLOW
+        STOP ERR_MAIN_WRITE_OUTPUT
     END IF
 
     ! Write flowfield data to file
