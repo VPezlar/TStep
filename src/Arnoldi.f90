@@ -109,16 +109,19 @@ CONTAINS
         END IF
         
         ! --- Create test matrix A with known eigenvalues ---
-        ! Using a diagonal matrix with eigenvalues: n, n-1, n-2, ..., 2, 1
-        ! This makes validation straightforward:
-        ! - Eigenvalues are exactly λ_k = n - k + 1 for k = 1, ..., n
-        ! - Arnoldi should capture the m largest: n, n-1, ..., n-m+1
+        ! CRITICAL: Arnoldi finds EXTREME eigenvalues (largest magnitude) well,
+        !           but CANNOT resolve clustered eigenvalues (4800, 4799, 4798...)!
+        ! Using exponentially-spaced eigenvalues: λ_i = 10^(6*(n-i+1)/n)
+        ! Range: 10^6 (largest) down to 1 (smallest)
+        ! For m=100, n=4800: captures eigenvalues from ~10^6 down to ~10^5.875
         A = 0.0_rk
         DO i = 1, n
-            A(i, i) = REAL(n - i + 1, rk)  ! Diagonal: n, n-1, ..., 2, 1
+            ! Exponential spacing: λ_i = 10^(6 * (n-i+1)/n)
+            A(i, i) = 10.0_rk ** (6.0_rk * REAL(n - i + 1, rk) / REAL(n, rk))
         END DO
         
-        WRITE(*,'(A,I0,A,I0)') 'Arnoldi: Using test matrix A (', n, 'x', n, ') - diagonal with λ = n...1'
+        WRITE(*,'(A,I0,A,I0)') 'Arnoldi: Test matrix A (', n, 'x', n, ') with exponentially-spaced λ'
+        WRITE(*,'(A,ES12.5,A,ES12.5)') '         λ_max = ', A(1,1), ', λ_min = ', A(n,n)
         
         ! --- Step 1: Initialize and normalize first Krylov vector ---
         ! CRITICAL: For diagonal test matrix, use RANDOM vector to explore all eigenspaces
