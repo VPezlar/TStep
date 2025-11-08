@@ -200,11 +200,16 @@ CONTAINS
         ! Validates computed Ritz eigenvalues against analytical eigenvalues
         ! of the tridiagonal test matrix
         
+        ! --- TEST VALIDATION VARIABLES (delete when removing test matrix) ---
         REAL(rk), DIMENSION(:), ALLOCATABLE :: analytical_evals
+        REAL(rk) :: pi
+        INTEGER(ik) :: n_analytical
+        ! --- END TEST VALIDATION VARIABLES ---
+        
+        ! Regular variables
         REAL(rk), DIMENSION(:), ALLOCATABLE :: computed_real_parts
-        REAL(rk) :: max_error, avg_error, max_imag
-        REAL(rk) :: pi, error_val
-        INTEGER(ik) :: k, n_analytical, n_check
+        REAL(rk) :: max_error, avg_error, max_imag, error_val
+        INTEGER(ik) :: k, n_check
         LOGICAL :: all_real, validation_passed
         
         WRITE(*,*) '==============================================='
@@ -244,7 +249,7 @@ CONTAINS
         WRITE(*,*) ''
         
         ! Check 2: Compare real parts with analytical values
-        ! Match the first few Ritz values with largest magnitude analytical eigenvalues
+        ! Sort both arrays by magnitude for direct comparison
         n_check = MIN(krylov_size, 10)  ! Check first 10
         
         ALLOCATE(computed_real_parts(n_check))
@@ -252,15 +257,20 @@ CONTAINS
             computed_real_parts(k) = REAL(eigenvalues(k))
         END DO
         
+        ! Sort analytical eigenvalues by magnitude (descending)
+        CALL sort_by_magnitude(analytical_evals, n_analytical)
+        
+        ! Sort computed eigenvalues by magnitude (descending)
+        CALL sort_by_magnitude(computed_real_parts, n_check)
+        
         WRITE(*,*) 'Comparing computed vs analytical eigenvalues:'
+        WRITE(*,*) '(Both sorted by descending magnitude)'
         WRITE(*,*) '  #   Computed         Analytical       Error'
         WRITE(*,*) '---  --------------   --------------   ----------'
         
         max_error = 0.0_rk
         avg_error = 0.0_rk
         DO k = 1, n_check
-            ! Compare with k-th analytical eigenvalue
-            ! Note: Arnoldi may not capture them in exact order
             error_val = ABS(computed_real_parts(k) - analytical_evals(k))
             max_error = MAX(max_error, error_val)
             avg_error = avg_error + error_val
@@ -300,6 +310,24 @@ CONTAINS
         DEALLOCATE(analytical_evals, computed_real_parts)
         
     END SUBROUTINE validate_eigenvalues
+    
+    SUBROUTINE sort_by_magnitude(array, n)
+        ! Simple bubble sort by descending magnitude
+        REAL(rk), DIMENSION(:), INTENT(INOUT) :: array
+        INTEGER(ik), INTENT(IN) :: n
+        INTEGER(ik) :: i, j
+        REAL(rk) :: temp
+        
+        DO i = 1, n-1
+            DO j = i+1, n
+                IF (ABS(array(j)) > ABS(array(i))) THEN
+                    temp = array(i)
+                    array(i) = array(j)
+                    array(j) = temp
+                END IF
+            END DO
+        END DO
+    END SUBROUTINE sort_by_magnitude
     
     SUBROUTINE cleanup_allocations()
         IF (ALLOCATED(p_in)) DEALLOCATE(p_in)
