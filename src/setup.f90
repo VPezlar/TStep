@@ -18,6 +18,12 @@ CONTAINS
                              dist_mag, &
                              COMMAND_RUN
 
+        ! Arnoldi-specific namelist
+        NAMELIST / Arnoldi / krylov_size, &
+                             frechet_order, &
+                             eps_0, &
+                             TTime
+
         ! OpenFOAM-specific namelist
         NAMELIST / OpenFOAM / N_HEADER_grid, &
                               N_HEADER_var, &
@@ -40,6 +46,15 @@ CONTAINS
         IF (status_id /= 0) THEN
             ierr = ERR_SETUP_NAMELIST_READ
             CALL log_error(ERR_SETUP_NAMELIST_READ, 'General namelist - '//TRIM(message))
+            CLOSE(unit_num)
+            RETURN
+        END IF
+
+        ! Read Arnoldi namelist
+        READ(unit_num, nml=Arnoldi, iostat=status_id, iomsg=message)
+        IF (status_id /= 0) THEN
+            ierr = ERR_SETUP_NAMELIST_READ
+            CALL log_error(ERR_SETUP_NAMELIST_READ, 'Arnoldi namelist - '//TRIM(message))
             CLOSE(unit_num)
             RETURN
         END IF

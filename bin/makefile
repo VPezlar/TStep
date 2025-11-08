@@ -6,7 +6,12 @@ OBJDIR := ../obj
 BINDIR := ../bin
 EXECUT := TStep
 
-# LIBBLAS := -framework Accelerate
+# LAPACK/BLAS is REQUIRED for Arnoldi module eigenvalue computation
+# Uncomment one of the following based on your system:
+# LIBBLAS := -framework Accelerate                    # macOS
+# LIBBLAS := -llapack -lblas                          # Linux with system LAPACK
+# LIBBLAS := -lmkl_rt                                 # Intel MKL
+
 # LIBHDF5 := -I$(shell brew --prefix hdf5)/include -L$(shell brew --prefix hdf5)/lib -lhdf5 -lhdf5_fortran
 
 FC := gfortran

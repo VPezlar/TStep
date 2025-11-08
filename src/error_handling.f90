@@ -63,6 +63,13 @@ MODULE error_handling
     INTEGER(ik), PARAMETER :: ERR_DIST_ALLOC = 702
     INTEGER(ik), PARAMETER :: ERR_DIST_ZERO_NORM = 703
     
+    ! --- Arnoldi Module (800-899) ---
+    INTEGER(ik), PARAMETER :: ERR_ARNOLDI_ZERO_V1 = 801
+    INTEGER(ik), PARAMETER :: ERR_ARNOLDI_INVALID_DIM = 802
+    INTEGER(ik), PARAMETER :: ERR_ARNOLDI_INVALID_KRYLOV = 803
+    INTEGER(ik), PARAMETER :: ERR_ARNOLDI_ALLOC = 804
+    INTEGER(ik), PARAMETER :: ERR_ARNOLDI_LAPACK = 805
+    
     ! ============================================================
     ! ERROR MESSAGE LOOKUP
     ! ============================================================
@@ -81,6 +88,8 @@ MODULE error_handling
               ERR_OUTPUT_FILE_OPEN, ERR_OUTPUT_WRITE_HEADER, ERR_OUTPUT_WRITE_DATA, &
               ERR_CMD_LAUNCH_FAILED, ERR_CMD_NONZERO_EXIT, &
               ERR_DIST_INVALID_LENGTH, ERR_DIST_ALLOC, ERR_DIST_ZERO_NORM, &
+              ERR_ARNOLDI_ZERO_V1, ERR_ARNOLDI_INVALID_DIM, ERR_ARNOLDI_INVALID_KRYLOV, &
+              ERR_ARNOLDI_ALLOC, ERR_ARNOLDI_LAPACK, &
               log_error, get_module_name, get_error_description
     
 CONTAINS
@@ -110,6 +119,8 @@ CONTAINS
                 module_name = "EXTERNAL_COMMAND"
             CASE (7)
                 module_name = "RANDOM_DISTURBANCE"
+            CASE (8)
+                module_name = "ARNOLDI"
             CASE DEFAULT
                 module_name = "UNKNOWN_MODULE"
         END SELECT
@@ -213,6 +224,18 @@ CONTAINS
                 description = "Memory allocation failed for disturbance"
             CASE (ERR_DIST_ZERO_NORM)
                 description = "Disturbance vector has zero norm"
+                
+            ! Arnoldi errors
+            CASE (ERR_ARNOLDI_ZERO_V1)
+                description = "Initial Arnoldi vector has zero norm"
+            CASE (ERR_ARNOLDI_INVALID_DIM)
+                description = "Invalid matrix dimension for Arnoldi"
+            CASE (ERR_ARNOLDI_INVALID_KRYLOV)
+                description = "Invalid Krylov subspace size"
+            CASE (ERR_ARNOLDI_ALLOC)
+                description = "Memory allocation failed in Arnoldi"
+            CASE (ERR_ARNOLDI_LAPACK)
+                description = "LAPACK eigenvalue computation failed"
                 
             CASE DEFAULT
                 description = "Unknown error code"
