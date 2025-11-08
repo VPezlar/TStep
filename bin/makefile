@@ -16,6 +16,7 @@ OBJECTS = accuracy.o \
 	  error_handling.o \
 	  variables.o \
 	  setup.o \
+	  Arnoldi.o \
 	  OpenFOAM_IO.o \
 	  read_flow.o \
 	  write_output.o \
