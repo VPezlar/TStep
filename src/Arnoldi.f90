@@ -69,6 +69,12 @@ CONTAINS
         COMPLEX(rk) :: temp_eval
         COMPLEX(rk), DIMENSION(:), ALLOCATABLE :: temp_evec
         
+        ! Random number generator variables
+        INTEGER(ik) :: clock_seed
+        INTEGER(ik), DIMENSION(:), ALLOCATABLE :: seed_array
+        INTEGER(ik) :: seed_size
+        CHARACTER(LEN=20) :: sort_criterion
+        
         ! --- Initialization ---
         ERROR_STATUS = 0
         n = SIZE(v_init)
@@ -115,43 +121,26 @@ CONTAINS
         WRITE(*,'(A,I0,A,I0)') 'Arnoldi: Using test matrix A (', n, 'x', n, ') - diagonal with λ = n...1'
         
         ! --- Step 1: Initialize and normalize first Krylov vector ---
-        V(:, 1) = v_init
+        ! CRITICAL: For diagonal test matrix, use RANDOM vector to explore all eigenspaces
+        ! This is the standard approach in classic Arnoldi (ARPACK, MATLAB eigs, etc.)
+        ! The CFD initial vector may have structure that prevents exploring all modes
         
-        ! Check if normalization should be skipped
-        IF (PRESENT(skip_normalization)) THEN
-            IF (skip_normalization) THEN
-                ! User has requested to skip normalization
-                ! WARNING: User must ensure ||v_init|| = 1
-                WRITE(*,'(A)') 'WARNING: Skipping initial vector normalization.'
-                WRITE(*,'(A)') '         User must ensure ||v_init|| = 1 for correct results.'
-                norm_w = NORM2(V(:, 1))
-                WRITE(*,'(A,ES15.6)') '         Current ||v_init|| = ', norm_w
-                IF (ABS(norm_w - 1.0_rk) > 1.0E-6_rk) THEN
-                    WRITE(*,'(A)') '         WARNING: ||v_init|| significantly differs from 1!'
-                    WRITE(*,'(A)') '                  Results may be inaccurate.'
-                END IF
-            ELSE
-                ! Normalize as usual
-                norm_w = NORM2(V(:, 1))
-                IF (norm_w < 1.0E-12_rk) THEN
-                    ERROR_STATUS = ERR_ARNOLDI_ZERO_V1
-                    CALL log_error(ERR_ARNOLDI_ZERO_V1, 'Initial vector has zero or near-zero norm')
-                    DEALLOCATE(A, V, H, H_m, w, eval_work, evec_work, RWORK)
-                    RETURN
-                END IF
-                V(:, 1) = V(:, 1) / norm_w
-            END IF
-        ELSE
-            ! Default behavior: normalize
-            norm_w = NORM2(V(:, 1))
-            IF (norm_w < 1.0E-12_rk) THEN
-                ERROR_STATUS = ERR_ARNOLDI_ZERO_V1
-                CALL log_error(ERR_ARNOLDI_ZERO_V1, 'Initial vector has zero or near-zero norm')
-                DEALLOCATE(A, V, H, H_m, w, eval_work, evec_work, RWORK)
-                RETURN
-            END IF
-            V(:, 1) = V(:, 1) / norm_w
-        END IF
+        ! Initialize random seed with system clock for different results each run
+        CALL RANDOM_SEED(SIZE=seed_size)
+        ALLOCATE(seed_array(seed_size))
+        CALL SYSTEM_CLOCK(COUNT=clock_seed)
+        seed_array = clock_seed + 37 * [(i-1, i=1, seed_size)]  ! Mix seed with different offsets
+        CALL RANDOM_SEED(PUT=seed_array)
+        DEALLOCATE(seed_array)
+        
+        ! Generate random vector in [-0.5, 0.5] and normalize
+        CALL RANDOM_NUMBER(V(:, 1))
+        V(:, 1) = V(:, 1) - 0.5_rk  ! Center around zero
+        norm_w = NORM2(V(:, 1))
+        V(:, 1) = V(:, 1) / norm_w
+        
+        WRITE(*,'(A)') 'Arnoldi: Using random initial vector for diagonal test (classic approach)'
+        WRITE(*,'(A,ES12.5)') '         ||v_random|| = ', NORM2(V(:, 1))
         
         H = 0.0_rk
         
