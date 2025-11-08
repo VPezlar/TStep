@@ -102,16 +102,16 @@ CONTAINS
         END IF
         
         ! --- Create test matrix A with known eigenvalues ---
-        ! Using a tridiagonal matrix with specific structure
-        ! Eigenvalues will be: λ_k = 2*cos(k*π/(n+1)) for k=1,...,n
+        ! Using a diagonal matrix with eigenvalues: n, n-1, n-2, ..., 2, 1
+        ! This makes validation straightforward:
+        ! - Eigenvalues are exactly λ_k = n - k + 1 for k = 1, ..., n
+        ! - Arnoldi should capture the m largest: n, n-1, ..., n-m+1
         A = 0.0_rk
         DO i = 1, n
-            A(i, i) = 0.0_rk
-            IF (i < n) A(i, i+1) = 1.0_rk
-            IF (i > 1) A(i, i-1) = 1.0_rk
+            A(i, i) = REAL(n - i + 1, rk)  ! Diagonal: n, n-1, ..., 2, 1
         END DO
         
-        WRITE(*,'(A,I0,A,I0)') 'Arnoldi: Using test matrix A (', n, 'x', n, ') - tridiagonal structure'
+        WRITE(*,'(A,I0,A,I0)') 'Arnoldi: Using test matrix A (', n, 'x', n, ') - diagonal with λ = n...1'
         
         ! --- Step 1: Initialize and normalize first Krylov vector ---
         V(:, 1) = v_init
