@@ -7,6 +7,8 @@ PROGRAM main
     USE call_CFD
     USE random_disturbance
     USE error_handling
+    USE Arnoldi
+    USE variables
 
     IMPLICIT NONE
 
@@ -14,6 +16,11 @@ PROGRAM main
     INTEGER(ik) :: data_count
     INTEGER(ik) :: error_status, STATUS_CODE
     INTEGER(ik) :: unit_num, i
+    
+    ! Arnoldi variables
+    COMPLEX(rk), DIMENSION(:), ALLOCATABLE :: eigenvalues
+    COMPLEX(rk), DIMENSION(:,:), ALLOCATABLE :: eigenvectors
+    REAL(rk), DIMENSION(:), ALLOCATABLE :: v_normalized
 
     ! Read configuration
     CALL configurationRead(error_status)
@@ -94,6 +101,86 @@ PROGRAM main
         STOP ERR_MAIN_WRITE_OUTPUT
     END IF
 
+    ! ===================================================================
+    ! --- ARNOLDI EIGENVALUE COMPUTATION (TEST/TEMPLATE) ---
+    ! ===================================================================
+    ! This section demonstrates how to use the Arnoldi module to compute
+    ! eigenvalues. Currently uses a hardcoded test matrix.
+    ! TODO: Replace matrix-vector product in Arnoldi.f90 with CFD solver calls
+    ! ===================================================================
+    
+    WRITE(*,*) ''
+    WRITE(*,*) '==============================================='
+    WRITE(*,*) 'ARNOLDI EIGENVALUE COMPUTATION'
+    WRITE(*,*) '==============================================='
+    WRITE(*,*) ''
+    
+    ! Normalize the disturbance vector for Arnoldi (requires ||v|| = 1)
+    ALLOCATE(v_normalized(SIZE(pert_0)), STAT=error_status)
+    IF (error_status /= 0) THEN
+        WRITE(*,*) 'ERROR: Failed to allocate v_normalized'
+        CALL cleanup_allocations()
+        STOP 1
+    END IF
+    
+    v_normalized = pert_0 / NORM2(pert_0)
+    WRITE(*,'(A,I0)') 'System dimension n = ', SIZE(v_normalized)
+    WRITE(*,'(A,I0)') 'Krylov size m = ', krylov_size
+    WRITE(*,'(A,ES15.6)') 'Initial vector normalized: ||v|| = ', NORM2(v_normalized)
+    WRITE(*,*) ''
+    
+    ! Call Arnoldi eigenvalue routine
+    ! NOTE: Currently uses hardcoded test matrix. Step 3 in Arnoldi.f90
+    !       will be replaced with CFD solver calls for production.
+    WRITE(*,*) 'Running Arnoldi iteration...'
+    CALL arnoldi_eigenvalues(v_normalized, krylov_size, frechet_order, eps_0, TTime, &
+                            eigenvalues, eigenvectors, error_status, &
+                            skip_normalization=.TRUE.)
+    
+    IF (error_status /= 0) THEN
+        CALL log_error(error_status)
+        CALL cleanup_allocations()
+        STOP error_status
+    END IF
+    
+    ! Display results
+    WRITE(*,*) ''
+    WRITE(*,*) '==============================================='
+    WRITE(*,*) 'SUCCESS: Eigenvalue computation completed!'
+    WRITE(*,*) '==============================================='
+    WRITE(*,*) ''
+    WRITE(*,*) 'Ritz eigenvalues (sorted by descending Im part):'
+    WRITE(*,*) '-----------------------------------------------'
+    WRITE(*,*) '  #    Real Part         Imag Part         |λ|'
+    WRITE(*,*) '-----------------------------------------------'
+    DO i = 1, MIN(10, krylov_size)  ! Display first 10 eigenvalues
+        WRITE(*,'(I3,2X,ES15.6,2X,ES15.6,2X,ES15.6)') i, &
+            REAL(eigenvalues(i)), AIMAG(eigenvalues(i)), ABS(eigenvalues(i))
+    END DO
+    WRITE(*,*) '-----------------------------------------------'
+    WRITE(*,*) ''
+    
+    ! Write eigenvalues to file
+    CALL get_unit(unit_num)
+    OPEN(UNIT=unit_num, FILE='eigenvalues.txt', STATUS='REPLACE', ACTION='WRITE', IOSTAT=error_status)
+    IF (error_status /= 0) THEN
+        WRITE(*,*) 'WARNING: Failed to open eigenvalues.txt for writing'
+    ELSE
+        WRITE(unit_num, '(A)') '# Ritz Eigenvalues from Arnoldi Iteration'
+        WRITE(unit_num, '(A)') '# Index, Real Part, Imaginary Part, Magnitude'
+        DO i = 1, krylov_size
+            WRITE(unit_num, '(I5,3ES25.15)') i, REAL(eigenvalues(i)), &
+                AIMAG(eigenvalues(i)), ABS(eigenvalues(i))
+        END DO
+        CLOSE(unit_num)
+        WRITE(*,*) 'SUCCESS: Wrote eigenvalues to eigenvalues.txt'
+    END IF
+    WRITE(*,*) ''
+    
+    ! ===================================================================
+    ! --- END ARNOLDI SECTION ---
+    ! ===================================================================
+
     ! Cleanup allocated memory
     CALL cleanup_allocations()
 
@@ -110,6 +197,9 @@ CONTAINS
         IF (ALLOCATED(Ygrid)) DEALLOCATE(Ygrid)
         IF (ALLOCATED(Zgrid)) DEALLOCATE(Zgrid)
         IF (ALLOCATED(pert_0)) DEALLOCATE(pert_0)
+        IF (ALLOCATED(v_normalized)) DEALLOCATE(v_normalized)
+        IF (ALLOCATED(eigenvalues)) DEALLOCATE(eigenvalues)
+        IF (ALLOCATED(eigenvectors)) DEALLOCATE(eigenvectors)
     END SUBROUTINE cleanup_allocations
 
 END PROGRAM main
