@@ -178,6 +178,16 @@ PROGRAM main
     WRITE(*,*) ''
     
     ! ===================================================================
+    ! --- VALIDATION: Check eigenvalues against analytical values ---
+    ! ===================================================================
+    ! The test matrix is tridiagonal with A(i,i)=0, A(i,i±1)=1
+    ! Analytical eigenvalues: λ_k = 2*cos(k*π/(n+1)) for k=1,...,n
+    ! These are REAL eigenvalues, so Im(λ) should be ~0
+    ! ===================================================================
+    
+    CALL validate_eigenvalues()
+    
+    ! ===================================================================
     ! --- END ARNOLDI SECTION ---
     ! ===================================================================
 
@@ -186,6 +196,112 @@ PROGRAM main
 
 CONTAINS
 
+    SUBROUTINE validate_eigenvalues()
+        ! Validates computed Ritz eigenvalues against analytical eigenvalues
+        ! of the tridiagonal test matrix
+        
+        REAL(rk), DIMENSION(:), ALLOCATABLE :: analytical_evals
+        REAL(rk), DIMENSION(:), ALLOCATABLE :: computed_real_parts
+        REAL(rk) :: max_error, avg_error, max_imag
+        REAL(rk) :: pi
+        INTEGER(ik) :: k, n_analytical, n_check
+        LOGICAL :: all_real, validation_passed
+        
+        WRITE(*,*) '==============================================='
+        WRITE(*,*) 'EIGENVALUE VALIDATION'
+        WRITE(*,*) '==============================================='
+        WRITE(*,*) ''
+        
+        n_analytical = SIZE(v_normalized)
+        pi = 4.0_rk * ATAN(1.0_rk)
+        
+        ! Compute analytical eigenvalues: λ_k = 2*cos(k*π/(n+1))
+        ALLOCATE(analytical_evals(n_analytical))
+        DO k = 1, n_analytical
+            analytical_evals(k) = 2.0_rk * COS(REAL(k, rk) * pi / REAL(n_analytical + 1, rk))
+        END DO
+        
+        WRITE(*,'(A,I0)') 'Test matrix dimension: n = ', n_analytical
+        WRITE(*,*) 'Analytical eigenvalues (first 10):'
+        DO k = 1, MIN(10, n_analytical)
+            WRITE(*,'(I3,2X,ES15.6)') k, analytical_evals(k)
+        END DO
+        WRITE(*,*) ''
+        
+        ! Check 1: Are eigenvalues real? (Imaginary part should be ~0)
+        max_imag = 0.0_rk
+        DO k = 1, krylov_size
+            max_imag = MAX(max_imag, ABS(AIMAG(eigenvalues(k))))
+        END DO
+        
+        all_real = (max_imag < 1.0E-6_rk)
+        WRITE(*,'(A,ES12.4)') 'Maximum imaginary part: ', max_imag
+        IF (all_real) THEN
+            WRITE(*,*) '✓ PASS: All eigenvalues are real (Im(λ) < 1E-6)'
+        ELSE
+            WRITE(*,*) '✗ FAIL: Some eigenvalues have significant imaginary parts'
+        END IF
+        WRITE(*,*) ''
+        
+        ! Check 2: Compare real parts with analytical values
+        ! Match the first few Ritz values with largest magnitude analytical eigenvalues
+        n_check = MIN(krylov_size, 10)  ! Check first 10
+        
+        ALLOCATE(computed_real_parts(n_check))
+        DO k = 1, n_check
+            computed_real_parts(k) = REAL(eigenvalues(k))
+        END DO
+        
+        WRITE(*,*) 'Comparing computed vs analytical eigenvalues:'
+        WRITE(*,*) '  #   Computed         Analytical       Error'
+        WRITE(*,*) '---  --------------   --------------   ----------'
+        
+        max_error = 0.0_rk
+        avg_error = 0.0_rk
+        DO k = 1, n_check
+            ! Compare with k-th analytical eigenvalue
+            ! Note: Arnoldi may not capture them in exact order
+            REAL(rk) :: error_val
+            error_val = ABS(computed_real_parts(k) - analytical_evals(k))
+            max_error = MAX(max_error, error_val)
+            avg_error = avg_error + error_val
+            
+            WRITE(*,'(I3,2X,ES15.6,2X,ES15.6,2X,ES11.3)') k, &
+                computed_real_parts(k), analytical_evals(k), error_val
+        END DO
+        avg_error = avg_error / REAL(n_check, rk)
+        
+        WRITE(*,*) '---  --------------   --------------   ----------'
+        WRITE(*,'(A,ES12.4)') 'Maximum error: ', max_error
+        WRITE(*,'(A,ES12.4)') 'Average error: ', avg_error
+        WRITE(*,*) ''
+        
+        ! Overall validation
+        validation_passed = all_real .AND. (max_error < 1.0E-3_rk)
+        
+        IF (validation_passed) THEN
+            WRITE(*,*) '==============================================='
+            WRITE(*,*) '✓✓✓ VALIDATION PASSED ✓✓✓'
+            WRITE(*,*) '==============================================='
+            WRITE(*,*) 'Computed eigenvalues match analytical values!'
+        ELSE
+            WRITE(*,*) '==============================================='
+            WRITE(*,*) '✗✗✗ VALIDATION FAILED ✗✗✗'
+            WRITE(*,*) '==============================================='
+            WRITE(*,*) 'Computed eigenvalues differ from expected!'
+            IF (.NOT. all_real) THEN
+                WRITE(*,*) '  - Eigenvalues have imaginary parts (should be real)'
+            END IF
+            IF (max_error >= 1.0E-3_rk) THEN
+                WRITE(*,*) '  - Errors exceed tolerance (max error > 1E-3)'
+            END IF
+        END IF
+        WRITE(*,*) ''
+        
+        DEALLOCATE(analytical_evals, computed_real_parts)
+        
+    END SUBROUTINE validate_eigenvalues
+    
     SUBROUTINE cleanup_allocations()
         IF (ALLOCATED(p_in)) DEALLOCATE(p_in)
         IF (ALLOCATED(rho_in)) DEALLOCATE(rho_in)
