@@ -203,7 +203,7 @@ CONTAINS
         REAL(rk), DIMENSION(:), ALLOCATABLE :: analytical_evals
         REAL(rk), DIMENSION(:), ALLOCATABLE :: computed_real_parts
         REAL(rk) :: max_error, avg_error, max_imag
-        REAL(rk) :: pi
+        REAL(rk) :: pi, error_val
         INTEGER(ik) :: k, n_analytical, n_check
         LOGICAL :: all_real, validation_passed
         
@@ -261,7 +261,6 @@ CONTAINS
         DO k = 1, n_check
             ! Compare with k-th analytical eigenvalue
             ! Note: Arnoldi may not capture them in exact order
-            REAL(rk) :: error_val
             error_val = ABS(computed_real_parts(k) - analytical_evals(k))
             max_error = MAX(max_error, error_val)
             avg_error = avg_error + error_val
