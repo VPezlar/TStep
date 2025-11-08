@@ -17,6 +17,14 @@
     COMMAND_RUN = 'cd /home/vojtech-p/work/openfoam/OpenFOAM-v2506/tutorials/compressible/rhoCentralFoam/wedge15Ma5/ && rhoCentralFoam > /dev/null 2>&1',
 /
 
+! Arnoldi Settings (for eigenvalue computation)
+&Arnoldi
+    krylov_size = 10,             ! Krylov subspace size (number of eigenvalues to compute)
+    frechet_order = 'First',      ! Order of Frechet derivative (unused for now)
+    eps_0 = 1.0d-6,               ! Epsilon parameter (unused for now)
+    TTime = 1.0,                  ! Time parameter (unused for now)
+/
+
 ! OpenFOAM-Specific Settings
 &OpenFOAM
     N_HEADER_grid = 21,           ! Number of header lines in grid coordinate file
