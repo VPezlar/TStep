@@ -53,6 +53,7 @@ CONTAINS
         REAL(rk), DIMENSION(:,:), ALLOCATABLE :: H_m  ! Upper m×m block of H for eigenvalue computation
         REAL(rk), DIMENSION(:), ALLOCATABLE :: w      ! Work vector
         REAL(rk) :: norm_w                            ! Norm of work vector
+        REAL(rk) :: h_correction                      ! Correction for reorthogonalization
         INTEGER(ik) :: i, j, k                        ! Loop counters
         INTEGER(ik) :: ALLOC_STAT                     ! Allocation status
         
@@ -160,10 +161,19 @@ CONTAINS
             ! NOTE: This will be replaced with CFD solver call
             w = MATMUL(A, V(:, j))
             
-            ! Gram-Schmidt orthogonalization
+            ! Classical Gram-Schmidt orthogonalization (first pass)
             DO i = 1, j
                 H(i, j) = DOT_PRODUCT(V(:, i), w)
                 w = w - H(i, j) * V(:, i)
+            END DO
+            
+            ! Reorthogonalization pass (critical for numerical stability with large m)
+            ! This is the standard approach used in ARPACK and other production codes
+            ! Cost: 2x orthogonalization, but essential for m > 20-30
+            DO i = 1, j
+                h_correction = DOT_PRODUCT(V(:, i), w)
+                H(i, j) = H(i, j) + h_correction  ! Accumulate total projection
+                w = w - h_correction * V(:, i)     ! Remove remaining component
             END DO
             
             ! Compute norm and normalize
