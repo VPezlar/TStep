@@ -55,11 +55,10 @@ CONTAINS
         INTEGER(ik) :: ALLOC_STAT                     ! Allocation status
         
         ! LAPACK variables for eigenvalue computation
-        COMPLEX(rk), DIMENSION(:), ALLOCATABLE :: eval_work    ! Eigenvalues from LAPACK (size m)
-        COMPLEX(rk), DIMENSION(:,:), ALLOCATABLE :: evec_work  ! Eigenvectors from LAPACK (m×m)
+        COMPLEX(rk), DIMENSION(:), ALLOCATABLE :: eval_work    ! Eigenvalues workspace (size m)
+        COMPLEX(rk), DIMENSION(:,:), ALLOCATABLE :: evec_work  ! Eigenvectors workspace (n×m)
         REAL(rk), DIMENSION(:), ALLOCATABLE :: RWORK           ! Real workspace for LAPACK
-        COMPLEX(rk), DIMENSION(:), ALLOCATABLE :: WORK         ! Complex workspace for LAPACK
-        INTEGER(ik) :: LWORK, INFO                             ! LAPACK parameters
+        INTEGER(ik) :: LWORK, INFO                             ! LAPACK parameters (unused)
         
         ! Sorting variables
         INTEGER(ik), DIMENSION(:), ALLOCATABLE :: sort_idx
@@ -92,10 +91,10 @@ CONTAINS
             RETURN
         END IF
         
-        ALLOCATE(eval_work(m), evec_work(m, m), RWORK(2*m), STAT=ALLOC_STAT)
+        ALLOCATE(eval_work(m), evec_work(n, m), RWORK(2*m), STAT=ALLOC_STAT)
         IF (ALLOC_STAT /= 0) THEN
             ERROR_STATUS = ERR_ARNOLDI_ALLOC
-            CALL log_error(ERR_ARNOLDI_ALLOC, 'Failed to allocate LAPACK arrays')
+            CALL log_error(ERR_ARNOLDI_ALLOC, 'Failed to allocate workspace arrays')
             DEALLOCATE(A, V, H, H_m, w)
             RETURN
         END IF
