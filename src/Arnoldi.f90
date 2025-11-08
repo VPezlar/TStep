@@ -11,7 +11,8 @@ MODULE Arnoldi
 CONTAINS
 
     SUBROUTINE arnoldi_eigenvalues(v_init, m, frechet_order, eps_0, TTime, &
-                                   eigenvalues, eigenvectors, ERROR_STATUS, skip_normalization)
+                                   eigenvalues, eigenvectors, ERROR_STATUS, &
+                                   skip_normalization, sort_by)
         ! Computes Ritz eigenvalues and eigenvectors using Arnoldi iteration
         !
         ! This subroutine performs Arnoldi iteration to build a Krylov subspace
@@ -42,6 +43,7 @@ CONTAINS
         COMPLEX(rk), DIMENSION(:,:), ALLOCATABLE, INTENT(OUT) :: eigenvectors  ! Ritz vectors (size n×m)
         INTEGER(ik),            INTENT(OUT)             :: ERROR_STATUS    ! 0 for success, non-zero for error
         LOGICAL,                INTENT(IN), OPTIONAL   :: skip_normalization ! If .TRUE., skip v_init normalization (default: .FALSE.)
+        CHARACTER(len=*),       INTENT(IN), OPTIONAL   :: sort_by         ! Sort criterion: 'magnitude', 'imaginary', 'real' (default: 'magnitude')
         
         ! Local Variables
         INTEGER(ik) :: n                              ! System dimension (inferred from v_init)
@@ -247,7 +249,7 @@ CONTAINS
             
         END BLOCK
         
-        ! --- Step 6: Sort by descending imaginary part ---
+        ! --- Step 6: Sort eigenvalues ---
         ALLOCATE(sort_idx(m), imag_parts(m), temp_evec(n), STAT=ALLOC_STAT)
         IF (ALLOC_STAT /= 0) THEN
             ERROR_STATUS = ERR_ARNOLDI_ALLOC
@@ -256,11 +258,38 @@ CONTAINS
             RETURN
         END IF
         
-        ! Extract imaginary parts and create index array
-        DO i = 1, m
-            imag_parts(i) = AIMAG(eigenvalues(i))
-            sort_idx(i) = i
-        END DO
+        ! Determine sort criterion
+        IF (PRESENT(sort_by)) THEN
+            IF (TRIM(sort_by) == 'imaginary') THEN
+                ! Sort by descending imaginary part
+                WRITE(*,'(A)') 'Sorting eigenvalues by: descending imaginary part'
+                DO i = 1, m
+                    imag_parts(i) = AIMAG(eigenvalues(i))
+                    sort_idx(i) = i
+                END DO
+            ELSE IF (TRIM(sort_by) == 'real') THEN
+                ! Sort by descending real part
+                WRITE(*,'(A)') 'Sorting eigenvalues by: descending real part'
+                DO i = 1, m
+                    imag_parts(i) = REAL(eigenvalues(i))
+                    sort_idx(i) = i
+                END DO
+            ELSE
+                ! Default: sort by magnitude
+                WRITE(*,'(A)') 'Sorting eigenvalues by: descending magnitude'
+                DO i = 1, m
+                    imag_parts(i) = ABS(eigenvalues(i))
+                    sort_idx(i) = i
+                END DO
+            END IF
+        ELSE
+            ! Default: sort by magnitude
+            WRITE(*,'(A)') 'Sorting eigenvalues by: descending magnitude (default)'
+            DO i = 1, m
+                imag_parts(i) = ABS(eigenvalues(i))
+                sort_idx(i) = i
+            END DO
+        END IF
         
         ! Simple bubble sort (descending order)
         DO i = 1, m-1

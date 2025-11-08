@@ -135,7 +135,7 @@ PROGRAM main
     WRITE(*,*) 'Running Arnoldi iteration...'
     CALL arnoldi_eigenvalues(v_normalized, krylov_size, frechet_order, eps_0, TTime, &
                             eigenvalues, eigenvectors, error_status, &
-                            skip_normalization=.TRUE.)
+                            skip_normalization=.TRUE., sort_by=eigenvalue_sort_by)
     
     IF (error_status /= 0) THEN
         CALL log_error(error_status)

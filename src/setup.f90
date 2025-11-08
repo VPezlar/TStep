@@ -21,6 +21,7 @@ CONTAINS
         ! Arnoldi-specific namelist
         NAMELIST / Arnoldi / krylov_size, &
                              frechet_order, &
+                             eigenvalue_sort_by, &
                              eps_0, &
                              TTime
 
