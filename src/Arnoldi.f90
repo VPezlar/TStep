@@ -184,7 +184,11 @@ CONTAINS
         END DO
         
         ! Step 2: A = (Q @ diag) @ Q^T
-        A = MATMUL(A, TRANSPOSE(eigvecs))
+        ! Use DGEMM for parallel matrix-matrix multiply
+        ! DGEMM: C = alpha*A*B + beta*C
+        ! A = (Q@diag) @ Q^T  -->  DGEMM('N', 'T', n, n, n, 1.0, Q@diag, n, Q, n, 0.0, A, n)
+        eigvecs_inv = A  ! Temporary storage for Q@diag
+        CALL DGEMM('N', 'T', n, n, n, 1.0_rk, eigvecs_inv, n, eigvecs, n, 0.0_rk, A, n)
         
         WRITE(*,'(A,I0,A,I0)') 'Arnoldi: Test matrix A (', n, 'x', n, ') with known eigenvalues'
         WRITE(*,'(A,F0.1,A,F0.1)') '         λ range: ', eigvals_diag(1), ' to ', eigvals_diag(n)
@@ -218,8 +222,10 @@ CONTAINS
         ! --- Step 2: Arnoldi iteration ---
         DO j = 1, m
             ! Compute w = A * v_j (matrix-vector product)
-            ! NOTE: This will be replaced with CFD solver call
-            w = MATMUL(A, V(:, j))
+            ! Use DGEMV for parallel matrix-vector multiply (THIS IS CRITICAL FOR SPEEDUP!)
+            ! DGEMV: y = alpha*A*x + beta*y
+            ! w = A * v  -->  DGEMV('N', n, n, 1.0, A, n, v, 1, 0.0, w, 1)
+            CALL DGEMV('N', n, n, 1.0_rk, A, n, V(:, j), 1, 0.0_rk, w, 1)
             
             ! Classical Gram-Schmidt orthogonalization (first pass)
             DO i = 1, j
@@ -323,16 +329,20 @@ CONTAINS
             DO WHILE (i <= m)
                 IF (ABS(eval_imag(i)) < 1.0E-14_rk) THEN
                     ! Real eigenvalue: real eigenvector
-                    eigenvectors(:, i) = CMPLX(MATMUL(V(:, 1:m), evec_right(:, i)), 0.0_rk, KIND=rk)
+                    ! Use DGEMV: V(:,1:m) * evec_right(:,i)
+                    CALL DGEMV('N', n, m, 1.0_rk, V, n, evec_right(:, i), 1, 0.0_rk, w, 1)
+                    eigenvectors(:, i) = CMPLX(w, 0.0_rk, KIND=rk)
                     i = i + 1
                 ELSE IF (eval_imag(i) > 0.0_rk) THEN
                     ! Complex conjugate pair: (λ, λ*) with eigenvectors (v, v*)
                     ! evec_right(:,i) is real part, evec_right(:,i+1) is imag part
-                    eigenvectors(:, i) = CMPLX(MATMUL(V(:, 1:m), evec_right(:, i)), &
-                                               MATMUL(V(:, 1:m), evec_right(:, i+1)), KIND=rk)
+                    ! Real part: V * evec_right(:,i)
+                    CALL DGEMV('N', n, m, 1.0_rk, V, n, evec_right(:, i), 1, 0.0_rk, w, 1)
+                    ! Imag part: V * evec_right(:,i+1)
+                    CALL DGEMV('N', n, m, 1.0_rk, V, n, evec_right(:, i+1), 1, 0.0_rk, eval_work, 1)
+                    eigenvectors(:, i) = CMPLX(w, eval_work, KIND=rk)
                     IF (i+1 <= m) THEN
-                        eigenvectors(:, i+1) = CMPLX(MATMUL(V(:, 1:m), evec_right(:, i)), &
-                                                     -MATMUL(V(:, 1:m), evec_right(:, i+1)), KIND=rk)
+                        eigenvectors(:, i+1) = CMPLX(w, -eval_work, KIND=rk)
                     END IF
                     i = i + 2
                 ELSE
