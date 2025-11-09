@@ -119,48 +119,59 @@ CONTAINS
             RETURN
         END IF
         
-        ! --- Create test matrix A with known eigenvalues (matching reference implementation) ---
-        ! Reference: A = la.solve(eigvecs, np.dot(np.diag(eigvals), eigvecs))
-        ! This is equivalent to: A = eigvecs @ diag(eigvals) @ inv(eigvecs)
-        ! Creates a DENSE matrix with known eigenvalues
+        ! --- Create test matrix A with known eigenvalues ---
+        ! Strategy: A = Q @ diag(eigvals) @ Q^T
+        ! where Q is orthogonal (from QR decomposition of random matrix)
+        ! This ensures excellent numerical conditioning
         
         ! Generate linearly spaced eigenvalues: 1, 2, 3, ..., n
         DO i = 1, n
             eigvals_diag(i) = REAL(i, rk)
         END DO
         
-        ! Generate random eigenvector matrix
+        ! Generate random matrix and compute QR decomposition
+        ! This gives us an orthogonal matrix Q (much better conditioned than random)
         CALL RANDOM_NUMBER(eigvecs)
         eigvecs = eigvecs - 0.5_rk  ! Center around zero
         
-        ! Compute A = eigvecs @ diag(eigvals) @ inv(eigvecs)
-        ! Step 1: Compute eigvecs @ diag(eigvals)
+        ! Compute QR decomposition: eigvecs = Q @ R
+        ! We only need Q (stored in eigvecs after DGEQRF)
+        CALL DGEQRF(n, n, eigvecs, n, w(1:MIN(n,n)), ipiv, -1, info_decomp)  ! Query work size
+        IF (info_decomp /= 0) THEN
+            ERROR_STATUS = ERR_ARNOLDI_LAPACK
+            CALL log_error(ERR_ARNOLDI_LAPACK, 'Failed QR query')
+            DEALLOCATE(A, V, H, H_m, w, eigvecs, eigvecs_inv, eigvals_diag, ipiv)
+            RETURN
+        END IF
+        
+        ! Perform QR decomposition
+        CALL DGEQRF(n, n, eigvecs, n, w(1:MIN(n,n)), ipiv, n, info_decomp)
+        IF (info_decomp /= 0) THEN
+            ERROR_STATUS = ERR_ARNOLDI_LAPACK
+            CALL log_error(ERR_ARNOLDI_LAPACK, 'Failed QR decomposition')
+            DEALLOCATE(A, V, H, H_m, w, eigvecs, eigvecs_inv, eigvals_diag, ipiv)
+            RETURN
+        END IF
+        
+        ! Extract Q matrix
+        CALL DORGQR(n, n, MIN(n,n), eigvecs, n, w(1:MIN(n,n)), ipiv, n, info_decomp)
+        IF (info_decomp /= 0) THEN
+            ERROR_STATUS = ERR_ARNOLDI_LAPACK
+            CALL log_error(ERR_ARNOLDI_LAPACK, 'Failed to generate Q matrix')
+            DEALLOCATE(A, V, H, H_m, w, eigvecs, eigvecs_inv, eigvals_diag, ipiv)
+            RETURN
+        END IF
+        
+        ! Compute A = Q @ diag(eigvals) @ Q^T
+        ! Step 1: Compute Q @ diag(eigvals)
         DO j = 1, n
             DO i = 1, n
                 A(i, j) = eigvecs(i, j) * eigvals_diag(j)
             END DO
         END DO
         
-        ! Step 2: Compute inv(eigvecs) using LU decomposition
-        eigvecs_inv = eigvecs
-        CALL DGETRF(n, n, eigvecs_inv, n, ipiv, info_decomp)
-        IF (info_decomp /= 0) THEN
-            ERROR_STATUS = ERR_ARNOLDI_LAPACK
-            CALL log_error(ERR_ARNOLDI_LAPACK, 'Failed to compute LU decomposition')
-            DEALLOCATE(A, V, H, H_m, w, eigvecs, eigvecs_inv, eigvals_diag, ipiv)
-            RETURN
-        END IF
-        
-        CALL DGETRI(n, eigvecs_inv, n, ipiv, w, n, info_decomp)
-        IF (info_decomp /= 0) THEN
-            ERROR_STATUS = ERR_ARNOLDI_LAPACK
-            CALL log_error(ERR_ARNOLDI_LAPACK, 'Failed to compute matrix inverse')
-            DEALLOCATE(A, V, H, H_m, w, eigvecs, eigvecs_inv, eigvals_diag, ipiv)
-            RETURN
-        END IF
-        
-        ! Step 3: A = (eigvecs @ diag(eigvals)) @ inv(eigvecs)
-        A = MATMUL(A, eigvecs_inv)
+        ! Step 2: A = (Q @ diag) @ Q^T
+        A = MATMUL(A, TRANSPOSE(eigvecs))
         
         WRITE(*,'(A,I0,A,I0)') 'Arnoldi: Test matrix A (', n, 'x', n, ') with known eigenvalues'
         WRITE(*,'(A,F0.1,A,F0.1)') '         λ range: ', eigvals_diag(1), ' to ', eigvals_diag(n)
