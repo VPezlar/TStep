@@ -19,7 +19,7 @@
 
 ! Arnoldi Settings (for eigenvalue computation)
 &Arnoldi
-    krylov_size = 100,                    ! Krylov subspace size (number of eigenvalues to compute)
+    krylov_size = 100,                   ! Krylov subspace size (number of eigenvalues to compute)
     frechet_order = 'First',             ! Order of Frechet derivative (unused for now)
     eigenvalue_sort_by = 'magnitude',    ! Sort eigenvalues by: 'imaginary', 'real', or 'magnitude'
     eps_0 = 1.0d-6,                      ! Epsilon parameter (unused for now)
