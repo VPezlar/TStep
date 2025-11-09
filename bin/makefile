@@ -10,7 +10,7 @@ EXECUT := TStep
 # Uncomment one of the following based on your system:
 #
 # Option 1: OpenBLAS (RECOMMENDED - automatically multi-threaded)
-# LIBBLAS := -lopenblas                               # Linux/macOS with OpenBLAS
+LIBBLAS := -lopenblas                               # Linux/macOS with OpenBLAS
 #                                                      # Install: sudo apt install libopenblas-dev (Ubuntu/Debian)
 #                                                      #          sudo yum install openblas-devel (CentOS/RHEL)
 #                                                      #          brew install openblas (macOS)
@@ -19,7 +19,7 @@ EXECUT := TStep
 # LIBBLAS := -lmkl_rt                                 # Intel MKL
 #
 # Option 3: System BLAS (Single-threaded, slowest)
-LIBBLAS := -llapack -lblas                          # Linux with system LAPACK (NOT threaded)
+# LIBBLAS := -llapack -lblas                          # Linux with system LAPACK (NOT threaded)
 #
 # Option 4: Apple Accelerate (macOS only, auto-threaded)
 # LIBBLAS := -framework Accelerate                    # macOS Accelerate framework
