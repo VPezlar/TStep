@@ -67,19 +67,16 @@ CONTAINS
         COMPLEX(rk), DIMENSION(:), ALLOCATABLE :: eval_work    ! Eigenvalues workspace (size m)
         COMPLEX(rk), DIMENSION(:,:), ALLOCATABLE :: evec_work  ! Eigenvectors workspace (n×m)
         REAL(rk), DIMENSION(:), ALLOCATABLE :: RWORK           ! Real workspace for LAPACK
-        INTEGER(ik) :: LWORK, INFO                             ! LAPACK parameters (unused)
         
         ! Sorting variables
         INTEGER(ik), DIMENSION(:), ALLOCATABLE :: sort_idx
         REAL(rk), DIMENSION(:), ALLOCATABLE :: imag_parts
-        COMPLEX(rk) :: temp_eval
         COMPLEX(rk), DIMENSION(:), ALLOCATABLE :: temp_evec
         
         ! Random number generator variables
         INTEGER(ik) :: clock_seed
         INTEGER(ik), DIMENSION(:), ALLOCATABLE :: seed_array
         INTEGER(ik) :: seed_size
-        CHARACTER(LEN=20) :: sort_criterion
         
         ! --- Initialization ---
         ERROR_STATUS = 0

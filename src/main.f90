@@ -113,23 +113,23 @@ PROGRAM main
     ! Expected: Arnoldi recovers eigenvalues 25, 24, 23, ..., 1
     ! ===================================================================
     
-    WRITE(*,*) ''
+    WRITE(*,*)
     WRITE(*,*) '======================================================='
     WRITE(*,*) 'ARNOLDI TEST - REFERENCE IMPLEMENTATION REPLICATION'
     WRITE(*,*) '======================================================='
-    WRITE(*,*) ''
+    WRITE(*,*)
     WRITE(*,*) 'Reference: CS450 Arnoldi iteration demo'
     WRITE(*,*) 'https://relate.cs.illinois.edu/.../Arnoldi%20iteration.html'
-    WRITE(*,*) ''
+    WRITE(*,*)
     WRITE(*,*) 'Test matrix:'
     WRITE(*,*) '  - Dimension: n = 25'
     WRITE(*,*) '  - Eigenvalues: 1, 2, 3, ..., 25'
     WRITE(*,*) '  - Construction: A = eigvecs @ diag(eigvals) @ inv(eigvecs)'
     WRITE(*,*) '  - Random eigenvector matrix'
-    WRITE(*,*) ''
+    WRITE(*,*)
     WRITE(*,*) 'Expected Ritz values: 25, 24, 23, 22, 21, ..., 1'
     WRITE(*,*) '(Arnoldi finds largest eigenvalues first)'
-    WRITE(*,*) ''
+    WRITE(*,*)
     
     ! HARDCODED test size (matching reference)
     ALLOCATE(v_normalized(25), STAT=error_status)
@@ -146,7 +146,7 @@ PROGRAM main
     WRITE(*,*) '======================================================='
     WRITE(*,*) 'RUNNING ARNOLDI ITERATION'
     WRITE(*,*) '======================================================='
-    WRITE(*,*) ''
+    WRITE(*,*)
     
     ! Call Arnoldi with n=25, m=25
     CALL arnoldi_eigenvalues(v_normalized, 25, frechet_order, eps_0, TTime, &
@@ -160,11 +160,11 @@ PROGRAM main
     END IF
     
     ! Display results
-    WRITE(*,*) ''
+    WRITE(*,*)
     WRITE(*,*) '======================================================='
     WRITE(*,*) 'RESULTS'
     WRITE(*,*) '======================================================='
-    WRITE(*,*) ''
+    WRITE(*,*)
     WRITE(*,*) 'Ritz eigenvalues (sorted by magnitude):'
     WRITE(*,*) '-------------------------------------------------------'
     WRITE(*,*) '  #    Real Part      Imag Part      |λ|         Expected'
@@ -174,14 +174,14 @@ PROGRAM main
             REAL(eigenvalues(i)), AIMAG(eigenvalues(i)), ABS(eigenvalues(i)), 25 - i + 1
     END DO
     WRITE(*,*) '-------------------------------------------------------'
-    WRITE(*,*) ''
+    WRITE(*,*)
     
     ! Write eigenvalues and eigenvectors to files in ../output/
     CALL write_eigen_files(eigenvalues, eigenvectors, error_status)
     IF (error_status /= 0) THEN
         WRITE(*,*) 'WARNING: Failed to write eigendata files'
     END IF
-    WRITE(*,*) ''
+    WRITE(*,*)
     
     ! ===================================================================
     ! --- VALIDATION: Check eigenvalues against analytical values ---
@@ -207,7 +207,7 @@ CONTAINS
         WRITE(*,*) '======================================================='
         WRITE(*,*) 'VALIDATION'
         WRITE(*,*) '======================================================='
-        WRITE(*,*) ''
+        WRITE(*,*)
         
         ! Check 1: Are eigenvalues real?
         max_imag = 0.0_rk
@@ -222,7 +222,7 @@ CONTAINS
         ELSE
             WRITE(*,*) 'FAIL: Eigenvalues have imaginary parts > 1E-10'
         END IF
-        WRITE(*,*) ''
+        WRITE(*,*)
         
         ! Check 2: Are eigenvalues correct? (25, 24, 23, ..., 1)
         max_rel_error = 0.0_rk
@@ -244,14 +244,14 @@ CONTAINS
         ELSE
             WRITE(*,*) 'FAIL: Eigenvalues have > 1% error'
         END IF
-        WRITE(*,*) ''
+        WRITE(*,*)
         
         ! Final verdict
         IF (all_real .AND. values_correct) THEN
             WRITE(*,*) '======================================================='
             WRITE(*,*) 'SUCCESS: ARNOLDI IMPLEMENTATION IS CORRECT!'
             WRITE(*,*) '======================================================='
-            WRITE(*,*) ''
+            WRITE(*,*)
             WRITE(*,*) 'The implementation matches the reference perfectly.'
             WRITE(*,*) 'All eigenvalues recovered correctly.'
         ELSE
@@ -265,7 +265,7 @@ CONTAINS
                 WRITE(*,*) '  Problem: Eigenvalue errors exceed 1%'
             END IF
         END IF
-        WRITE(*,*) ''
+        WRITE(*,*)
         
     END SUBROUTINE validate_eigenvalues
     

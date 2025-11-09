@@ -94,7 +94,7 @@ CONTAINS
         
         CLOSE(unit_evec)
         WRITE(*,*) 'SUCCESS: Wrote eigenvectors to ../output/eigenvectors.dat'
-        WRITE(*,*) ''
+        WRITE(*,*)
         
     END SUBROUTINE write_eigen_files
 

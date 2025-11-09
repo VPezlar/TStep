@@ -4,6 +4,8 @@ MODULE setup
     USE error_handling
 
     IMPLICIT NONE
+    
+    PUBLIC :: configurationRead, get_unit, INT_TO_STR
 
 CONTAINS
 
@@ -100,5 +102,12 @@ CONTAINS
 
         u = 88
     END SUBROUTINE get_unit
+    
+    ! Helper function to convert integer to string
+    FUNCTION INT_TO_STR(val) RESULT(str)
+        INTEGER(ik), INTENT(IN) :: val
+        CHARACTER(len=20) :: str
+        WRITE(str, '(I0)') val
+    END FUNCTION INT_TO_STR
 
 END MODULE setup

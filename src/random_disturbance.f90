@@ -1,7 +1,7 @@
 MODULE random_disturbance
     USE accuracy
     USE variables
-    USE setup
+    USE setup, ONLY: INT_TO_STR
     USE error_handling
 
     IMPLICIT NONE
@@ -72,12 +72,5 @@ CONTAINS
         FINAL_VECTOR = FINAL_VECTOR * SCALING_CONSTANT
 
     END SUBROUTINE initial_disturbance
-    
-    ! Helper function to convert integer to string
-    FUNCTION INT_TO_STR(val) RESULT(str)
-        INTEGER(ik), INTENT(IN) :: val
-        CHARACTER(len=20) :: str
-        WRITE(str, '(I0)') val
-    END FUNCTION INT_TO_STR
 
 END MODULE random_disturbance

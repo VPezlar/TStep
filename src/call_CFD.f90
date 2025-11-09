@@ -1,6 +1,7 @@
 MODULE call_CFD
     USE accuracy
     USE error_handling
+    USE setup, ONLY: INT_TO_STR
     
     IMPLICIT NONE
 
@@ -52,12 +53,5 @@ CONTAINS
         WRITE(*,*) 'SUCCESS: Command finished successfully (Exit Code 0).'
         
     END SUBROUTINE run_simulation
-    
-    ! Helper function to convert integer to string
-    FUNCTION INT_TO_STR(val) RESULT(str)
-        INTEGER(ik), INTENT(IN) :: val
-        CHARACTER(len=20) :: str
-        WRITE(str, '(I0)') val
-    END FUNCTION INT_TO_STR
 
 END MODULE call_CFD

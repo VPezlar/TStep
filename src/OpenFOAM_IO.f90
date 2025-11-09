@@ -1,7 +1,7 @@
 MODULE OpenFOAM_IO
     USE accuracy
     USE variables
-    USE setup, ONLY: get_unit
+    USE setup, ONLY: get_unit, INT_TO_STR
     USE error_handling
 
     IMPLICIT NONE
@@ -234,13 +234,6 @@ CONTAINS
         CLOSE(unit_num)
 
     END SUBROUTINE read_OF_vectors
-    
-    ! Helper function to convert integer to string
-    FUNCTION INT_TO_STR(val) RESULT(str)
-        INTEGER(ik), INTENT(IN) :: val
-        CHARACTER(len=20) :: str
-        WRITE(str, '(I0)') val
-    END FUNCTION INT_TO_STR
 
     ! Subroutine to write scalar data back to OpenFOAM file (preserving header and footer)
     SUBROUTINE write_OF_scalars(filename, n_header_lines, data_vector, n_data_points, ierr)

@@ -36,6 +36,11 @@ While TStep is designed for general CFD solver compatibility, the current implem
 ### ✅ Implemented
 - **External command execution**: Run CFD simulations (OpenFOAM, or any solver) via shell commands
 - **Random disturbance generation**: Create normalized, scaled random perturbation vectors for sensitivity analysis
+- **Arnoldi eigenvalue analysis**: Compute Ritz eigenvalues and eigenvectors using Arnoldi iteration with LAPACK
+  - Krylov subspace construction with reorthogonalization for numerical stability
+  - Complex eigenvalue support via DGEEV
+  - Flexible sorting (magnitude, real part, imaginary part)
+  - Exports eigenvalues and eigenvectors to `.dat` files
 - **OpenFOAM I/O**: Read and write scalar fields (pressure, density, temperature) and vector fields (velocity, coordinates)
 - **Flow field perturbation**: Apply perturbations to flow fields and write back to OpenFOAM format
 - **Data export**: Write processed data to CSV format
@@ -61,15 +66,17 @@ TStep/
 │   ├── accuracy.f90          # Precision definitions
 │   ├── error_handling.f90    # Centralized error code management
 │   ├── variables.f90         # Global variables
-│   ├── setup.f90             # Configuration reading
+│   ├── setup.f90             # Configuration reading and utilities
 │   ├── call_CFD.f90          # External command execution
 │   ├── random_disturbance.f90 # Random perturbation generation
+│   ├── Arnoldi.f90           # Arnoldi iteration eigenvalue solver
+│   ├── write_eigendata.f90   # Eigenvalue/eigenvector output module
 │   ├── read_flow.f90         # Flow field reading module
 │   ├── write_flow.f90        # Flow field writing module (OpenFOAM format)
 │   ├── write_output.f90      # CSV output writing
 │   └── OpenFOAM_IO.f90       # OpenFOAM file I/O routines (read & write)
 ├── inputs/           # Input configuration files
-├── output/           # Output CSV files
+├── output/           # Output CSV and eigenvalue files
 ├── bin/              # Compiled executables
 ├── mod/              # Compiled modules
 └── obj/              # Object files
@@ -190,6 +197,16 @@ The configuration file uses multiple namelists:
 | `dist_mag` | real | Magnitude for random disturbance vector scaling |
 | `COMMAND_RUN` | string | External command to execute CFD simulation |
 
+### Arnoldi Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `krylov_size` | integer | Size of Krylov subspace (number of eigenvalues to compute) |
+| `frechet_order` | string | Order of Fréchet derivative (reserved for future use) |
+| `eigenvalue_sort_by` | string | Sorting criterion: 'magnitude', 'real', or 'imaginary' |
+| `eps_0` | real | Epsilon parameter (reserved for future use) |
+| `TTime` | real | Time parameter (reserved for future use) |
+
 ### OpenFOAM-Specific Parameters
 
 | Parameter | Type | Description |
@@ -272,6 +289,8 @@ ERROR_CODE = MODULE_ID × 100 + SPECIFIC_ERROR
 | 500-599 | Output Writing          | Output file open, write errors    |
 | 600-699 | External Commands       | Command launch, execution failures |
 | 700-799 | Random Disturbance      | Invalid length, allocation, normalization errors |
+| 800-899 | Arnoldi Eigenvalues     | Invalid dimensions, LAPACK failures, allocation errors |
+| 900-999 | Eigendata Writing       | Cannot open output files, write failures |
 
 ### Benefits
 
@@ -372,9 +391,61 @@ Global variables module containing:
 Configuration reading module with subroutines:
 - `configurationRead(ierr)`: Reads namelists from `inputs/inputs.in`
   - Reads `&General` namelist for solver-agnostic settings
+  - Reads `&Arnoldi` namelist for eigenvalue computation parameters
   - Reads solver-specific namelist based on `flow_format` (e.g., `&OpenFOAM`)
   - Validates `flow_format` and returns error for unsupported solvers
 - `get_unit(u)`: Returns an available file unit number (10-99)
+- `INT_TO_STR(val)`: Utility function to convert integers to strings
+
+### Arnoldi
+Arnoldi iteration eigenvalue solver module:
+- `arnoldi_eigenvalues(v_init, m, frechet_order, eps_0, TTime, eigenvalues, eigenvectors, error_status, skip_normalization, sort_by)`: Computes Ritz eigenvalues and eigenvectors
+
+#### Features:
+- **Krylov subspace construction**: Classical Gram-Schmidt with reorthogonalization
+- **LAPACK integration**: Uses DGEEV for eigenvalue computation of real Hessenberg matrix
+- **Complex eigenvalue handling**: Properly handles complex conjugate pairs from DGEEV
+- **Flexible sorting**: Sort by magnitude, real part, or imaginary part (descending order)
+- **Numerical stability**: Double orthogonalization for large Krylov sizes (m > 20-30)
+- **Test matrix validation**: Built-in test with known eigenvalues for verification
+
+#### Algorithm:
+1. Build Krylov basis V and Hessenberg matrix H via Arnoldi iteration
+2. Extract m×m upper block H_m from H
+3. Compute eigenvalues/eigenvectors of H_m using LAPACK DGEEV
+4. Transform eigenvectors back to full space: Ritz vectors = V × y
+5. Sort eigenvalues according to specified criterion
+
+#### Error Codes:
+- `801`: Initial vector has zero norm
+- `802`: Invalid matrix dimension
+- `803`: Invalid Krylov subspace size
+- `804`: Memory allocation failed
+- `805`: LAPACK computation failed
+
+#### Current Status:
+- ✅ **Working**: Verified against reference implementation (CS450 Arnoldi demo)
+- ⚠️ **Test mode**: Uses synthetic test matrix with known eigenvalues
+- 🔜 **Production**: Will replace test matrix with CFD linearized operator
+
+### write_eigendata
+Eigenvalue and eigenvector output module:
+- `write_eigen_files(eigenvalues, eigenvectors, error_status)`: Writes eigendata to files in `../output/` directory
+
+#### Output Files:
+- `eigenvalues.dat`: Complex eigenvalues (real part, imaginary part, magnitude)
+- `eigenvectors.dat`: Complex eigenvectors (component-wise real and imaginary parts)
+
+#### Format:
+- Scientific notation with 15 significant digits
+- Includes headers with metadata (sorting criterion, dimensions)
+- One eigenvalue per line; eigenvectors grouped by index
+
+#### Error Codes:
+- `901`: Cannot open eigenvalues.dat
+- `902`: Cannot open eigenvectors.dat
+- `903`: Error writing eigenvalues
+- `904`: Error writing eigenvectors
 
 ### OpenFOAM_IO
 Low-level I/O routines for OpenFOAM file formats:
@@ -438,8 +509,11 @@ Main program that:
 4. Generates random disturbance vector via `initial_disturbance()`
 5. Applies perturbations to flow fields and writes perturbed data to OpenFOAM format via `write_flowfield()`
 6. Writes original (unperturbed) results to CSV via `write_flowfield_data()`
-7. Performs cleanup of all allocated memory
-8. Returns exit codes:
+7. **Computes Arnoldi eigenvalues** via `arnoldi_eigenvalues()` (currently in test mode)
+8. **Writes eigenvalue data** to `../output/eigenvalues.dat` and `../output/eigenvectors.dat`
+9. **Validates results** against known eigenvalues (test mode only)
+10. Performs cleanup of all allocated memory
+11. Returns exit codes:
    - `0`: Success
    - `1`: Configuration read failure
    - `2`: External command failure
@@ -499,6 +573,9 @@ The application follows best practices for memory management:
 
 ### Software
 - Fortran 90/95 compiler (e.g., gfortran, ifort)
+- **LAPACK/BLAS libraries** (required for Arnoldi eigenvalue computation)
+  - Linux: `libblas-dev liblapack-dev` or Intel MKL
+  - macOS: Built-in Accelerate framework
 - CFD solver (currently tested with OpenFOAM)
 - POSIX-compliant shell (for external command execution)
 
@@ -578,6 +655,13 @@ For questions about the project or collaboration opportunities, please open an i
 
 ## Version History
 
+- **v3.0 (current)**: 
+  - **Arnoldi eigenvalue analysis**: Full implementation with LAPACK integration
+  - Krylov subspace construction with reorthogonalization
+  - Complex eigenvalue support and flexible sorting
+  - Eigenvalue/eigenvector output to `.dat` files
+  - Code quality improvements (removed unused variables, consolidated utilities)
+  - Verified against reference implementation
 - **v2.1 (zeus branch)**: 
   - Centralized hierarchical error handling system
   - Improved error diagnostics and logging
