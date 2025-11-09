@@ -2,6 +2,7 @@ MODULE write_eigendata
     USE accuracy
     USE variables
     USE error_handling
+    USE setup, ONLY: get_unit
     
     IMPLICIT NONE
     
