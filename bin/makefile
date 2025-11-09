@@ -10,8 +10,8 @@ EXECUT := TStep
 # Uncomment one of the following based on your system:
 #
 # Option 1: OpenBLAS (RECOMMENDED - automatically multi-threaded)
-LIBBLAS := -lopenblas                               # Linux/macOS with OpenBLAS
-#                                                      # Install: sudo apt install libopenblas-dev (Ubuntu/Debian)
+LIBBLAS := -lopenblasp                                 # Linux/macOS with OpenBLAS
+#                                                      # Install: sudo apt install libopenblasp-dev (Ubuntu/Debian)
 #                                                      #          sudo yum install openblas-devel (CentOS/RHEL)
 #                                                      #          brew install openblas (macOS)
 #
