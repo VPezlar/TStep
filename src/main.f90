@@ -10,8 +10,19 @@ PROGRAM main
     USE Arnoldi
     USE write_eigendata
     USE variables
+    USE, INTRINSIC :: ISO_C_BINDING
 
     IMPLICIT NONE
+    
+    ! C interface for setenv
+    INTERFACE
+        FUNCTION c_setenv(name, value, overwrite) BIND(C, NAME="setenv")
+            USE, INTRINSIC :: ISO_C_BINDING
+            INTEGER(C_INT) :: c_setenv
+            CHARACTER(KIND=C_CHAR), DIMENSION(*) :: name, value
+            INTEGER(C_INT), VALUE :: overwrite
+        END FUNCTION c_setenv
+    END INTERFACE
 
     REAL(rk), DIMENSION(:), ALLOCATABLE :: rho_in, p_in, T_in, U_in, V_in, W_in, Xgrid, Ygrid, Zgrid, pert_0
     INTEGER(ik) :: data_count
@@ -212,20 +223,29 @@ PROGRAM main
 CONTAINS
 
     SUBROUTINE set_blas_threads(nthreads)
-        ! Displays thread configuration for BLAS/LAPACK
-        ! Note: Set environment variables BEFORE running the program:
-        !   export OMP_NUM_THREADS=4
-        !   export OPENBLAS_NUM_THREADS=4
+        ! Sets thread count for BLAS/LAPACK via environment variables
         INTEGER(ik), INTENT(IN) :: nthreads
+        CHARACTER(len=20) :: threads_str
+        INTEGER(C_INT) :: result
         
         IF (nthreads <= 0) THEN
+            ! Auto mode: don't set limits
+            WRITE(*,*)
             WRITE(*,*) 'BLAS threading: AUTO mode (using all available cores)'
-            WRITE(*,*) 'To limit cores, set OMP_NUM_THREADS before running'
         ELSE
-            WRITE(*,'(A,I0,A)') 'BLAS threading: Requesting ', nthreads, ' thread(s)'
-            WRITE(*,*) 'Set these before running for OpenBLAS/MKL:'
-            WRITE(*,'(A,I0)') '  export OMP_NUM_THREADS=', nthreads
-            WRITE(*,'(A,I0)') '  export OPENBLAS_NUM_THREADS=', nthreads
+            ! Set specific thread count
+            WRITE(threads_str, '(I0)') nthreads
+            
+            ! Set environment variables (C_NULL_CHAR terminates C strings)
+            result = c_setenv('OMP_NUM_THREADS'//C_NULL_CHAR, &
+                              TRIM(threads_str)//C_NULL_CHAR, 1_C_INT)
+            result = c_setenv('OPENBLAS_NUM_THREADS'//C_NULL_CHAR, &
+                              TRIM(threads_str)//C_NULL_CHAR, 1_C_INT)
+            result = c_setenv('MKL_NUM_THREADS'//C_NULL_CHAR, &
+                              TRIM(threads_str)//C_NULL_CHAR, 1_C_INT)
+            
+            WRITE(*,*)
+            WRITE(*,'(A,I0,A)') 'BLAS threading: Set to ', nthreads, ' thread(s)'
         END IF
         WRITE(*,*)
         
