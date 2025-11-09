@@ -70,6 +70,12 @@ MODULE error_handling
     INTEGER(ik), PARAMETER :: ERR_ARNOLDI_ALLOC = 804
     INTEGER(ik), PARAMETER :: ERR_ARNOLDI_LAPACK = 805
     
+    ! --- Eigendata Writing Module (900-999) ---
+    INTEGER(ik), PARAMETER :: ERR_EIGENDATA_OPEN_EVAL = 901
+    INTEGER(ik), PARAMETER :: ERR_EIGENDATA_OPEN_EVEC = 902
+    INTEGER(ik), PARAMETER :: ERR_EIGENDATA_WRITE_EVAL = 903
+    INTEGER(ik), PARAMETER :: ERR_EIGENDATA_WRITE_EVEC = 904
+    
     ! ============================================================
     ! ERROR MESSAGE LOOKUP
     ! ============================================================
@@ -90,6 +96,8 @@ MODULE error_handling
               ERR_DIST_INVALID_LENGTH, ERR_DIST_ALLOC, ERR_DIST_ZERO_NORM, &
               ERR_ARNOLDI_ZERO_V1, ERR_ARNOLDI_INVALID_DIM, ERR_ARNOLDI_INVALID_KRYLOV, &
               ERR_ARNOLDI_ALLOC, ERR_ARNOLDI_LAPACK, &
+              ERR_EIGENDATA_OPEN_EVAL, ERR_EIGENDATA_OPEN_EVEC, &
+              ERR_EIGENDATA_WRITE_EVAL, ERR_EIGENDATA_WRITE_EVEC, &
               log_error, get_module_name, get_error_description
     
 CONTAINS
@@ -121,6 +129,8 @@ CONTAINS
                 module_name = "RANDOM_DISTURBANCE"
             CASE (8)
                 module_name = "ARNOLDI"
+            CASE (9)
+                module_name = "EIGENDATA_WRITING"
             CASE DEFAULT
                 module_name = "UNKNOWN_MODULE"
         END SELECT
@@ -236,6 +246,16 @@ CONTAINS
                 description = "Memory allocation failed in Arnoldi"
             CASE (ERR_ARNOLDI_LAPACK)
                 description = "LAPACK eigenvalue computation failed"
+                
+            ! Eigendata writing errors
+            CASE (ERR_EIGENDATA_OPEN_EVAL)
+                description = "Cannot open eigenvalues.dat for writing"
+            CASE (ERR_EIGENDATA_OPEN_EVEC)
+                description = "Cannot open eigenvectors.dat for writing"
+            CASE (ERR_EIGENDATA_WRITE_EVAL)
+                description = "Error writing eigenvalues data"
+            CASE (ERR_EIGENDATA_WRITE_EVEC)
+                description = "Error writing eigenvectors data"
                 
             CASE DEFAULT
                 description = "Unknown error code"

@@ -8,6 +8,7 @@ PROGRAM main
     USE random_disturbance
     USE error_handling
     USE Arnoldi
+    USE write_eigendata
     USE variables
 
     IMPLICIT NONE
@@ -175,20 +176,10 @@ PROGRAM main
     WRITE(*,*) '-------------------------------------------------------'
     WRITE(*,*) ''
     
-    ! Write eigenvalues to file
-    CALL get_unit(unit_num)
-    OPEN(UNIT=unit_num, FILE='eigenvalues.txt', STATUS='REPLACE', ACTION='WRITE', IOSTAT=error_status)
+    ! Write eigenvalues and eigenvectors to files in ../output/
+    CALL write_eigen_files(eigenvalues, eigenvectors, error_status)
     IF (error_status /= 0) THEN
-        WRITE(*,*) 'WARNING: Failed to open eigenvalues.txt for writing'
-    ELSE
-        WRITE(unit_num, '(A)') '# Ritz Eigenvalues from Arnoldi Iteration (Reference Test)'
-        WRITE(unit_num, '(A)') '# Index, Real Part, Imaginary Part, Magnitude, Expected'
-        DO i = 1, 25
-            WRITE(unit_num, '(I5,3ES25.15,I5)') i, REAL(eigenvalues(i)), &
-                AIMAG(eigenvalues(i)), ABS(eigenvalues(i)), 25 - i + 1
-        END DO
-        CLOSE(unit_num)
-        WRITE(*,*) 'SUCCESS: Wrote eigenvalues to eigenvalues.txt'
+        WRITE(*,*) 'WARNING: Failed to write eigendata files'
     END IF
     WRITE(*,*) ''
     
