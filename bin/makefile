@@ -8,9 +8,21 @@ EXECUT := TStep
 
 # LAPACK/BLAS is REQUIRED for Arnoldi module eigenvalue computation
 # Uncomment one of the following based on your system:
-# LIBBLAS := -framework Accelerate                    # macOS
-LIBBLAS := -llapack -lblas                          # Linux with system LAPACK
+#
+# Option 1: OpenBLAS (RECOMMENDED - automatically multi-threaded)
+# LIBBLAS := -lopenblas                               # Linux/macOS with OpenBLAS
+#                                                      # Install: sudo apt install libopenblas-dev (Ubuntu/Debian)
+#                                                      #          sudo yum install openblas-devel (CentOS/RHEL)
+#                                                      #          brew install openblas (macOS)
+#
+# Option 2: Intel MKL (Fastest, auto-threaded, free for non-commercial)
 # LIBBLAS := -lmkl_rt                                 # Intel MKL
+#
+# Option 3: System BLAS (Single-threaded, slowest)
+LIBBLAS := -llapack -lblas                          # Linux with system LAPACK (NOT threaded)
+#
+# Option 4: Apple Accelerate (macOS only, auto-threaded)
+# LIBBLAS := -framework Accelerate                    # macOS Accelerate framework
 
 # LIBHDF5 := -I$(shell brew --prefix hdf5)/include -L$(shell brew --prefix hdf5)/lib -lhdf5 -lhdf5_fortran
 

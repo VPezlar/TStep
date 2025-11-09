@@ -13,5 +13,8 @@ MODULE variables
     CHARACTER(len=20) :: frechet_order
     CHARACTER(len=20) :: eigenvalue_sort_by
     REAL(rk) :: eps_0, TTime
+    
+    ! Performance parameters
+    INTEGER(ik) :: num_threads  ! Number of threads for BLAS/LAPACK (0 = auto)
 
 END MODULE variables

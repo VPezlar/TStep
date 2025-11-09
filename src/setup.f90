@@ -25,7 +25,8 @@ CONTAINS
                              frechet_order, &
                              eigenvalue_sort_by, &
                              eps_0, &
-                             TTime
+                             TTime, &
+                             num_threads
 
         ! OpenFOAM-specific namelist
         NAMELIST / OpenFOAM / N_HEADER_grid, &

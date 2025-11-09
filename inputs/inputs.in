@@ -24,6 +24,10 @@
     eigenvalue_sort_by = 'magnitude',    ! Sort eigenvalues by: 'imaginary', 'real', or 'magnitude'
     eps_0 = 1.0d-6,                      ! Epsilon parameter (unused for now)
     TTime = 1.0,                         ! Time parameter (unused for now)
+    num_threads = 4,                     ! Number of BLAS/LAPACK threads (0 = auto, use all cores)
+                                          ! IMPORTANT: On HPC login nodes, set to 2-4 to avoid overloading
+                                          ! On compute nodes: 0 (auto) or match allocated cores
+                                          ! Examples: 0 (auto), 1 (serial), 4 (quad-core), 8 (8-core)
 /
 
 ! OpenFOAM-Specific Settings

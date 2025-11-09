@@ -131,6 +131,9 @@ PROGRAM main
     WRITE(*,*) '(Arnoldi finds largest eigenvalues first)'
     WRITE(*,*)
     
+    ! Set number of threads for BLAS/LAPACK operations
+    CALL set_blas_threads(num_threads)
+    
     ! HARDCODED test size (matching reference)
     ALLOCATE(v_normalized(25), STAT=error_status)
     IF (error_status /= 0) THEN
@@ -196,6 +199,36 @@ PROGRAM main
     CALL cleanup_allocations()
 
 CONTAINS
+
+    SUBROUTINE set_blas_threads(nthreads)
+        ! Sets the number of threads for OpenBLAS/MKL
+        ! nthreads = 0: Use all available cores (automatic)
+        ! nthreads > 0: Use specified number of threads
+        INTEGER(ik), INTENT(IN) :: nthreads
+        CHARACTER(len=20) :: threads_str
+        INTEGER(ik) :: actual_threads
+        
+        IF (nthreads <= 0) THEN
+            ! Auto mode - let BLAS decide (uses all cores)
+            CALL setenv('OMP_NUM_THREADS', '', 1)
+            CALL setenv('OPENBLAS_NUM_THREADS', '', 1)
+            CALL setenv('MKL_NUM_THREADS', '', 1)
+            WRITE(*,*) 'BLAS threading: AUTO (using all available cores)'
+        ELSE
+            ! Manual mode - set specific thread count
+            actual_threads = nthreads
+            WRITE(threads_str, '(I0)') actual_threads
+            
+            ! Set for different BLAS implementations
+            CALL setenv('OMP_NUM_THREADS', TRIM(threads_str), 1)
+            CALL setenv('OPENBLAS_NUM_THREADS', TRIM(threads_str), 1)
+            CALL setenv('MKL_NUM_THREADS', TRIM(threads_str), 1)
+            
+            WRITE(*,'(A,I0,A)') 'BLAS threading: Using ', actual_threads, ' thread(s)'
+        END IF
+        WRITE(*,*)
+        
+    END SUBROUTINE set_blas_threads
 
     SUBROUTINE validate_eigenvalues()
         ! Validates against reference test: n=25, eigenvalues 1-25
