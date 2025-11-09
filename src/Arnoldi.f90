@@ -52,6 +52,7 @@ CONTAINS
         REAL(rk), DIMENSION(:,:), ALLOCATABLE :: H    ! Hessenberg matrix ((m+1)×m)
         REAL(rk), DIMENSION(:,:), ALLOCATABLE :: H_m  ! Upper m×m block of H for eigenvalue computation
         REAL(rk), DIMENSION(:), ALLOCATABLE :: w      ! Work vector
+        REAL(rk), DIMENSION(:), ALLOCATABLE :: w_temp ! Temporary work vector for eigenvector reconstruction
         REAL(rk) :: norm_w                            ! Norm of work vector
         REAL(rk) :: h_correction                      ! Correction for reorthogonalization
         INTEGER(ik) :: i, j, k                        ! Loop counters
@@ -96,7 +97,7 @@ CONTAINS
         END IF
         
         ! --- Allocate arrays ---
-        ALLOCATE(A(n, n), V(n, m+1), H(m+1, m), H_m(m, m), w(n), STAT=ALLOC_STAT)
+        ALLOCATE(A(n, n), V(n, m+1), H(m+1, m), H_m(m, m), w(n), w_temp(n), STAT=ALLOC_STAT)
         IF (ALLOC_STAT /= 0) THEN
             ERROR_STATUS = ERR_ARNOLDI_ALLOC
             CALL log_error(ERR_ARNOLDI_ALLOC, 'Failed to allocate Arnoldi arrays')
@@ -339,10 +340,10 @@ CONTAINS
                     ! Real part: V * evec_right(:,i)
                     CALL DGEMV('N', n, m, 1.0_rk, V, n, evec_right(:, i), 1, 0.0_rk, w, 1)
                     ! Imag part: V * evec_right(:,i+1)
-                    CALL DGEMV('N', n, m, 1.0_rk, V, n, evec_right(:, i+1), 1, 0.0_rk, eval_work, 1)
-                    eigenvectors(:, i) = CMPLX(w, eval_work, KIND=rk)
+                    CALL DGEMV('N', n, m, 1.0_rk, V, n, evec_right(:, i+1), 1, 0.0_rk, w_temp, 1)
+                    eigenvectors(:, i) = CMPLX(w, w_temp, KIND=rk)
                     IF (i+1 <= m) THEN
-                        eigenvectors(:, i+1) = CMPLX(w, -eval_work, KIND=rk)
+                        eigenvectors(:, i+1) = CMPLX(w, -w_temp, KIND=rk)
                     END IF
                     i = i + 2
                 ELSE
