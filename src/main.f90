@@ -123,9 +123,9 @@ PROGRAM main
     ! This test EXACTLY replicates the reference implementation:
     ! https://relate.cs.illinois.edu/.../Arnoldi%20iteration.html
     ! 
-    ! Test matrix: n=5000, eigenvalues = [1, 2, 3, ..., 5000]
+    ! Test matrix: n=7500, eigenvalues = [1, 2, 3, ..., 7500]
     ! Construction: A = Q @ diag(eigvals) @ Q^T (symmetric, well-conditioned)
-    ! Expected: Arnoldi recovers largest eigenvalues close to 5000
+    ! Expected: Arnoldi recovers largest eigenvalues close to 7500
     ! ===================================================================
     
     WRITE(*,*)
@@ -134,20 +134,20 @@ PROGRAM main
     WRITE(*,*) '======================================================='
     WRITE(*,*)
     WRITE(*,*) 'Test problem for scalability testing:'
-    WRITE(*,*) '  - Dimension: n = 5000'
+    WRITE(*,*) '  - Dimension: n = 7500'
     WRITE(*,*) '  - Krylov size: m = 200'
-    WRITE(*,*) '  - Eigenvalues: 1, 2, 3, ..., 5000'
+    WRITE(*,*) '  - Eigenvalues: 1, 2, 3, ..., 7500'
     WRITE(*,*) '  - Construction: A = Q @ diag(eigvals) @ Q^T (symmetric)'
     WRITE(*,*) '  - Q = orthogonal matrix from QR decomposition'
     WRITE(*,*)
-    WRITE(*,*) 'Expected: Top 5 should be close to 5000, 4999, 4998, 4997, 4996'
+    WRITE(*,*) 'Expected: Top 5 should be close to 7500, 7499, 7498, 7497, 7496'
     WRITE(*,*)
     
     ! Set number of threads for BLAS/LAPACK operations
     CALL set_blas_threads(num_threads)
     
     ! HARDCODED test size for scalability testing
-    ALLOCATE(v_normalized(5000), STAT=error_status)
+    ALLOCATE(v_normalized(7500), STAT=error_status)
     IF (error_status /= 0) THEN
         WRITE(*,*) 'ERROR: Failed to allocate v_normalized'
         CALL cleanup_allocations()
@@ -195,7 +195,7 @@ PROGRAM main
     WRITE(*,*) '-------------------------------------------------------'
     DO i = 1, MIN(5, SIZE(eigenvalues))
         WRITE(*,'(I3,2X,F12.6,2X,F12.6,2X,F12.6,2X,I5)') i, &
-            REAL(eigenvalues(i)), AIMAG(eigenvalues(i)), ABS(eigenvalues(i)), 5001 - i
+            REAL(eigenvalues(i)), AIMAG(eigenvalues(i)), ABS(eigenvalues(i)), 7501 - i
     END DO
     WRITE(*,*) '-------------------------------------------------------'
     WRITE(*,'(A,I0,A)') '(Computed ', SIZE(eigenvalues), ' eigenvalues total)'
@@ -264,9 +264,9 @@ CONTAINS
     END SUBROUTINE set_blas_threads
 
     SUBROUTINE validate_eigenvalues()
-        ! Validates test matrix eigenvalues: n=5000, m=200
-        ! Matrix A has eigenvalues 1, 2, 3, ..., 5000
-        ! With large Krylov subspace, top 5 should be very close to 5000, 4999, 4998, 4997, 4996
+        ! Validates test matrix eigenvalues: n=7500, m=200
+        ! Matrix A has eigenvalues 1, 2, 3, ..., 7500
+        ! With large Krylov subspace, top 5 should be very close to 7500, 7499, 7498, 7497, 7496
         REAL(rk) :: max_imag, max_eval, rel_error
         REAL(rk) :: computed_val, expected_val, max_rel_error
         INTEGER(ik) :: k, m_size
@@ -304,7 +304,7 @@ CONTAINS
         WRITE(*,*) '-----------------------------------------------'
         DO k = 1, MIN(5, m_size)
             computed_val = ABS(eigenvalues(k))
-            expected_val = REAL(5001 - k, rk)  ! 5000, 4999, 4998, 4997, 4996
+            expected_val = REAL(7501 - k, rk)  ! 7500, 7499, 7498, 7497, 7496
             rel_error = ABS(computed_val - expected_val) / expected_val * 100.0_rk
             max_rel_error = MAX(max_rel_error, rel_error)
             max_eval = MAX(max_eval, computed_val)
