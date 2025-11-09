@@ -226,7 +226,9 @@ CONTAINS
         ! Sets thread count for BLAS/LAPACK via environment variables
         INTEGER(ik), INTENT(IN) :: nthreads
         CHARACTER(len=20) :: threads_str
+        CHARACTER(len=100) :: env_value
         INTEGER(C_INT) :: result
+        INTEGER :: env_length, env_status
         
         IF (nthreads <= 0) THEN
             ! Auto mode: don't set limits
@@ -246,7 +248,17 @@ CONTAINS
             
             WRITE(*,*)
             WRITE(*,'(A,I0,A)') 'BLAS threading: Set to ', nthreads, ' thread(s)'
+            
+            ! Verify by reading back the environment variable
+            CALL GET_ENVIRONMENT_VARIABLE('OMP_NUM_THREADS', env_value, env_length, env_status)
+            IF (env_status == 0) THEN
+                WRITE(*,'(A,A)') 'Verified OMP_NUM_THREADS = ', TRIM(env_value)
+            END IF
         END IF
+        WRITE(*,*)
+        WRITE(*,*) 'To verify threading is working:'
+        WRITE(*,*) '  - Run "htop" in another terminal while this runs'
+        WRITE(*,*) '  - Look for multiple CPU cores at ~100% usage'
         WRITE(*,*)
         
     END SUBROUTINE set_blas_threads
