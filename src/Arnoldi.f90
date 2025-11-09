@@ -60,8 +60,8 @@ CONTAINS
         ! Test matrix construction variables
         REAL(rk), DIMENSION(:,:), ALLOCATABLE :: eigvecs, eigvecs_inv
         REAL(rk), DIMENSION(:), ALLOCATABLE :: eigvals_diag
-        INTEGER(ik), DIMENSION(:), ALLOCATABLE :: ipiv
-        INTEGER(ik) :: info_decomp
+        REAL(rk), DIMENSION(:), ALLOCATABLE :: tau_qr, work_qr
+        INTEGER(ik) :: info_decomp, lwork_qr
         
         ! LAPACK variables for eigenvalue computation
         COMPLEX(rk), DIMENSION(:), ALLOCATABLE :: eval_work    ! Eigenvalues workspace (size m)
@@ -103,7 +103,7 @@ CONTAINS
             RETURN
         END IF
         
-        ALLOCATE(eigvecs(n, n), eigvecs_inv(n, n), eigvals_diag(n), ipiv(n), STAT=ALLOC_STAT)
+        ALLOCATE(eigvecs(n, n), eigvecs_inv(n, n), eigvals_diag(n), tau_qr(n), STAT=ALLOC_STAT)
         IF (ALLOC_STAT /= 0) THEN
             ERROR_STATUS = ERR_ARNOLDI_ALLOC
             CALL log_error(ERR_ARNOLDI_ALLOC, 'Failed to allocate matrix construction arrays')
@@ -135,30 +135,43 @@ CONTAINS
         eigvecs = eigvecs - 0.5_rk  ! Center around zero
         
         ! Compute QR decomposition: eigvecs = Q @ R
-        ! We only need Q (stored in eigvecs after DGEQRF)
-        CALL DGEQRF(n, n, eigvecs, n, w(1:MIN(n,n)), ipiv, -1, info_decomp)  ! Query work size
+        ! Query optimal work size
+        ALLOCATE(work_qr(1))
+        CALL DGEQRF(n, n, eigvecs, n, tau_qr, work_qr, -1, info_decomp)
         IF (info_decomp /= 0) THEN
             ERROR_STATUS = ERR_ARNOLDI_LAPACK
             CALL log_error(ERR_ARNOLDI_LAPACK, 'Failed QR query')
-            DEALLOCATE(A, V, H, H_m, w, eigvecs, eigvecs_inv, eigvals_diag, ipiv)
+            DEALLOCATE(A, V, H, H_m, w, eigvecs, eigvecs_inv, eigvals_diag, tau_qr, work_qr)
             RETURN
         END IF
         
+        lwork_qr = INT(work_qr(1))
+        DEALLOCATE(work_qr)
+        ALLOCATE(work_qr(lwork_qr))
+        
         ! Perform QR decomposition
-        CALL DGEQRF(n, n, eigvecs, n, w(1:MIN(n,n)), ipiv, n, info_decomp)
+        CALL DGEQRF(n, n, eigvecs, n, tau_qr, work_qr, lwork_qr, info_decomp)
         IF (info_decomp /= 0) THEN
             ERROR_STATUS = ERR_ARNOLDI_LAPACK
             CALL log_error(ERR_ARNOLDI_LAPACK, 'Failed QR decomposition')
-            DEALLOCATE(A, V, H, H_m, w, eigvecs, eigvecs_inv, eigvals_diag, ipiv)
+            DEALLOCATE(A, V, H, H_m, w, eigvecs, eigvecs_inv, eigvals_diag, tau_qr, work_qr)
             RETURN
         END IF
         
+        ! Query optimal work size for DORGQR
+        DEALLOCATE(work_qr)
+        ALLOCATE(work_qr(1))
+        CALL DORGQR(n, n, n, eigvecs, n, tau_qr, work_qr, -1, info_decomp)
+        lwork_qr = INT(work_qr(1))
+        DEALLOCATE(work_qr)
+        ALLOCATE(work_qr(lwork_qr))
+        
         ! Extract Q matrix
-        CALL DORGQR(n, n, MIN(n,n), eigvecs, n, w(1:MIN(n,n)), ipiv, n, info_decomp)
+        CALL DORGQR(n, n, n, eigvecs, n, tau_qr, work_qr, lwork_qr, info_decomp)
         IF (info_decomp /= 0) THEN
             ERROR_STATUS = ERR_ARNOLDI_LAPACK
             CALL log_error(ERR_ARNOLDI_LAPACK, 'Failed to generate Q matrix')
-            DEALLOCATE(A, V, H, H_m, w, eigvecs, eigvecs_inv, eigvals_diag, ipiv)
+            DEALLOCATE(A, V, H, H_m, w, eigvecs, eigvecs_inv, eigvals_diag, tau_qr, work_qr)
             RETURN
         END IF
         
@@ -176,7 +189,7 @@ CONTAINS
         WRITE(*,'(A,I0,A,I0)') 'Arnoldi: Test matrix A (', n, 'x', n, ') with known eigenvalues'
         WRITE(*,'(A,F0.1,A,F0.1)') '         λ range: ', eigvals_diag(1), ' to ', eigvals_diag(n)
         
-        DEALLOCATE(eigvecs, eigvecs_inv, eigvals_diag, ipiv)
+        DEALLOCATE(eigvecs, eigvecs_inv, eigvals_diag, tau_qr, work_qr)
         
         ! --- Step 1: Initialize and normalize first Krylov vector ---
         ! CRITICAL: For diagonal test matrix, use RANDOM vector to explore all eigenspaces
