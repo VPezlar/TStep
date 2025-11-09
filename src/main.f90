@@ -149,7 +149,7 @@ PROGRAM main
     WRITE(*,*) 'SUCCESS: Eigenvalue computation completed!'
     WRITE(*,*) '==============================================='
     WRITE(*,*) ''
-    WRITE(*,*) 'Ritz eigenvalues (sorted by descending Im part):'
+    WRITE(*,'(A,A)') 'Ritz eigenvalues (sorted by: ', TRIM(eigenvalue_sort_by), ')'
     WRITE(*,*) '-----------------------------------------------'
     WRITE(*,*) '  #    Real Part         Imag Part         |λ|'
     WRITE(*,*) '-----------------------------------------------'
@@ -180,9 +180,9 @@ PROGRAM main
     ! ===================================================================
     ! --- VALIDATION: Check eigenvalues against analytical values ---
     ! ===================================================================
-    ! The test matrix is tridiagonal with A(i,i)=0, A(i,i±1)=1
-    ! Analytical eigenvalues: λ_k = 2*cos(k*π/(n+1)) for k=1,...,n
-    ! These are REAL eigenvalues, so Im(λ) should be ~0
+    ! The test matrix has known eigenvalues: 1, 2, 3, ..., n
+    ! constructed via A = eigvecs @ diag(eigvals) @ inv(eigvecs)
+    ! Arnoldi should recover the largest m eigenvalues: n, n-1, ..., n-m+1
     ! ===================================================================
     
     CALL validate_eigenvalues()
@@ -198,17 +198,13 @@ CONTAINS
 
     SUBROUTINE validate_eigenvalues()
         ! Validates computed Ritz eigenvalues against analytical eigenvalues
-        ! of the tridiagonal test matrix
+        ! Test matrix: A = eigvecs @ diag(1,2,3,...,n) @ inv(eigvecs)
+        ! Expected: Arnoldi recovers largest m eigenvalues: n, n-1, ..., n-m+1
         
-        ! --- TEST VALIDATION VARIABLES (delete when removing test matrix) ---
         REAL(rk), DIMENSION(:), ALLOCATABLE :: analytical_evals
-        REAL(rk) :: pi
         INTEGER(ik) :: n_analytical
-        ! --- END TEST VALIDATION VARIABLES ---
-        
-        ! Regular variables
-        REAL(rk) :: max_error, max_imag, rel_error, max_rel_error
-        REAL(rk) :: computed_val, error_abs
+        REAL(rk) :: max_imag, rel_error, max_rel_error
+        REAL(rk) :: computed_val
         INTEGER(ik) :: k
         LOGICAL :: all_real, validation_passed
         
@@ -219,17 +215,17 @@ CONTAINS
         
         n_analytical = SIZE(v_normalized)
         
-        ! Compute analytical eigenvalues: exponentially-spaced λ_i = 10^(6*(n-i+1)/n)
+        ! Expected eigenvalues: n, n-1, n-2, ..., n-m+1 (largest m eigenvalues)
         ALLOCATE(analytical_evals(krylov_size))
         DO k = 1, krylov_size
-            analytical_evals(k) = 10.0_rk ** (6.0_rk * REAL(n_analytical - k + 1, rk) / REAL(n_analytical, rk))
+            analytical_evals(k) = REAL(n_analytical - k + 1, rk)
         END DO
         
         WRITE(*,'(A,I0)') 'Test matrix dimension: n = ', n_analytical
         WRITE(*,'(A,I0)') 'Krylov size m = ', krylov_size
-        WRITE(*,*) 'Expected eigenvalues (m largest, showing first 10):'
+        WRITE(*,*) 'Expected eigenvalues (m largest):'
         DO k = 1, MIN(10, krylov_size)
-            WRITE(*,'(I3,2X,ES15.6)') k, analytical_evals(k)
+            WRITE(*,'(I3,2X,F10.1)') k, analytical_evals(k)
         END DO
         WRITE(*,*) ''
         
@@ -242,14 +238,14 @@ CONTAINS
         all_real = (max_imag < 1.0E-6_rk)
         WRITE(*,'(A,ES12.4)') 'Maximum imaginary part: ', max_imag
         IF (all_real) THEN
-            WRITE(*,*) '✓ PASS: All eigenvalues are real (Im(λ) < 1E-6)'
+            WRITE(*,*) 'PASS: All eigenvalues are real (Im(λ) < 1E-6)'
         ELSE
-            WRITE(*,*) '✗ FAIL: Some eigenvalues have significant imaginary parts'
+            WRITE(*,*) 'FAIL: Some eigenvalues have significant imaginary parts'
         END IF
         WRITE(*,*) ''
         
-        ! Check 2: Compare computed vs analytical (first 10)
-        WRITE(*,*) 'Comparing computed vs analytical eigenvalues (first 10):'
+        ! Check 2: Compare computed vs analytical
+        WRITE(*,*) 'Comparing computed vs analytical eigenvalues:'
         WRITE(*,*) '  #   Computed         Analytical       Rel. Error'
         WRITE(*,*) '---  --------------   --------------   -----------'
         
@@ -268,39 +264,41 @@ CONTAINS
         WRITE(*,'(A,F10.4,A)') 'Maximum relative error: ', max_rel_error, '%'
         WRITE(*,*) ''
         
-        ! Check if errors are acceptable
+        ! Determine validation status
         IF (max_rel_error < 0.01_rk) THEN
-            WRITE(*,*) '✓ EXCELLENT: Eigenvalues match with < 0.01% error!'
+            WRITE(*,*) 'EXCELLENT: Eigenvalues match with < 0.01% error!'
             validation_passed = .TRUE.
         ELSE IF (max_rel_error < 1.0_rk) THEN
-            WRITE(*,*) '✓ GOOD: Eigenvalues match with < 1% error'
+            WRITE(*,*) 'GOOD: Eigenvalues match with < 1% error'
             validation_passed = .TRUE.
         ELSE IF (max_rel_error < 10.0_rk) THEN
-            WRITE(*,*) '✓ ACCEPTABLE: Eigenvalues match with < 10% error'
+            WRITE(*,*) 'ACCEPTABLE: Eigenvalues match with < 10% error'
             validation_passed = .TRUE.
         ELSE
-            WRITE(*,*) '✗ POOR: Eigenvalues have > 10% error'
+            WRITE(*,*) 'POOR: Eigenvalues have > 10% error'
             validation_passed = .FALSE.
         END IF
         WRITE(*,*) ''
         
         IF (validation_passed .AND. all_real) THEN
             WRITE(*,*) '==============================================='
-            WRITE(*,*) '✓✓✓ VALIDATION PASSED ✓✓✓'
+            WRITE(*,*) 'VALIDATION PASSED'
             WRITE(*,*) '==============================================='
             WRITE(*,*) 'Arnoldi eigenvalue computation is working correctly!'
         ELSE
             WRITE(*,*) '==============================================='
-            WRITE(*,*) '✗✗✗ VALIDATION FAILED ✗✗✗'
+            WRITE(*,*) 'VALIDATION FAILED'
             WRITE(*,*) '==============================================='
             IF (.NOT. all_real) THEN
-                WRITE(*,*) '  - Eigenvalues have imaginary parts (should be real for diagonal matrix)'
+                WRITE(*,*) '  - Eigenvalues have imaginary parts (should be real)'
             END IF
             IF (.NOT. validation_passed) THEN
                 WRITE(*,*) '  - Eigenvalues have unacceptable errors (> 10%)'
             END IF
         END IF
         WRITE(*,*) ''
+        
+        DEALLOCATE(analytical_evals)
         
     END SUBROUTINE validate_eigenvalues
     

@@ -57,6 +57,12 @@ CONTAINS
         INTEGER(ik) :: i, j, k                        ! Loop counters
         INTEGER(ik) :: ALLOC_STAT                     ! Allocation status
         
+        ! Test matrix construction variables
+        REAL(rk), DIMENSION(:,:), ALLOCATABLE :: eigvecs, eigvecs_inv
+        REAL(rk), DIMENSION(:), ALLOCATABLE :: eigvals_diag
+        INTEGER(ik), DIMENSION(:), ALLOCATABLE :: ipiv
+        INTEGER(ik) :: info_decomp
+        
         ! LAPACK variables for eigenvalue computation
         COMPLEX(rk), DIMENSION(:), ALLOCATABLE :: eval_work    ! Eigenvalues workspace (size m)
         COMPLEX(rk), DIMENSION(:,:), ALLOCATABLE :: evec_work  ! Eigenvectors workspace (n×m)
@@ -100,6 +106,14 @@ CONTAINS
             RETURN
         END IF
         
+        ALLOCATE(eigvecs(n, n), eigvecs_inv(n, n), eigvals_diag(n), ipiv(n), STAT=ALLOC_STAT)
+        IF (ALLOC_STAT /= 0) THEN
+            ERROR_STATUS = ERR_ARNOLDI_ALLOC
+            CALL log_error(ERR_ARNOLDI_ALLOC, 'Failed to allocate matrix construction arrays')
+            DEALLOCATE(A, V, H, H_m, w)
+            RETURN
+        END IF
+        
         ALLOCATE(eval_work(m), evec_work(n, m), RWORK(2*m), STAT=ALLOC_STAT)
         IF (ALLOC_STAT /= 0) THEN
             ERROR_STATUS = ERR_ARNOLDI_ALLOC
@@ -108,20 +122,53 @@ CONTAINS
             RETURN
         END IF
         
-        ! --- Create test matrix A with known eigenvalues ---
-        ! CRITICAL: Arnoldi finds EXTREME eigenvalues (largest magnitude) well,
-        !           but CANNOT resolve clustered eigenvalues (4800, 4799, 4798...)!
-        ! Using exponentially-spaced eigenvalues: λ_i = 10^(6*(n-i+1)/n)
-        ! Range: 10^6 (largest) down to 1 (smallest)
-        ! For m=100, n=4800: captures eigenvalues from ~10^6 down to ~10^5.875
-        A = 0.0_rk
+        ! --- Create test matrix A with known eigenvalues (matching reference implementation) ---
+        ! Reference: A = la.solve(eigvecs, np.dot(np.diag(eigvals), eigvecs))
+        ! This is equivalent to: A = eigvecs @ diag(eigvals) @ inv(eigvecs)
+        ! Creates a DENSE matrix with known eigenvalues
+        
+        ! Generate linearly spaced eigenvalues: 1, 2, 3, ..., n
         DO i = 1, n
-            ! Exponential spacing: λ_i = 10^(6 * (n-i+1)/n)
-            A(i, i) = 10.0_rk ** (6.0_rk * REAL(n - i + 1, rk) / REAL(n, rk))
+            eigvals_diag(i) = REAL(i, rk)
         END DO
         
-        WRITE(*,'(A,I0,A,I0)') 'Arnoldi: Test matrix A (', n, 'x', n, ') with exponentially-spaced λ'
-        WRITE(*,'(A,ES12.5,A,ES12.5)') '         λ_max = ', A(1,1), ', λ_min = ', A(n,n)
+        ! Generate random eigenvector matrix
+        CALL RANDOM_NUMBER(eigvecs)
+        eigvecs = eigvecs - 0.5_rk  ! Center around zero
+        
+        ! Compute A = eigvecs @ diag(eigvals) @ inv(eigvecs)
+        ! Step 1: Compute eigvecs @ diag(eigvals)
+        DO j = 1, n
+            DO i = 1, n
+                A(i, j) = eigvecs(i, j) * eigvals_diag(j)
+            END DO
+        END DO
+        
+        ! Step 2: Compute inv(eigvecs) using LU decomposition
+        eigvecs_inv = eigvecs
+        CALL DGETRF(n, n, eigvecs_inv, n, ipiv, info_decomp)
+        IF (info_decomp /= 0) THEN
+            ERROR_STATUS = ERR_ARNOLDI_LAPACK
+            CALL log_error(ERR_ARNOLDI_LAPACK, 'Failed to compute LU decomposition')
+            DEALLOCATE(A, V, H, H_m, w, eigvecs, eigvecs_inv, eigvals_diag, ipiv)
+            RETURN
+        END IF
+        
+        CALL DGETRI(n, eigvecs_inv, n, ipiv, w, n, info_decomp)
+        IF (info_decomp /= 0) THEN
+            ERROR_STATUS = ERR_ARNOLDI_LAPACK
+            CALL log_error(ERR_ARNOLDI_LAPACK, 'Failed to compute matrix inverse')
+            DEALLOCATE(A, V, H, H_m, w, eigvecs, eigvecs_inv, eigvals_diag, ipiv)
+            RETURN
+        END IF
+        
+        ! Step 3: A = (eigvecs @ diag(eigvals)) @ inv(eigvecs)
+        A = MATMUL(A, eigvecs_inv)
+        
+        WRITE(*,'(A,I0,A,I0)') 'Arnoldi: Test matrix A (', n, 'x', n, ') with known eigenvalues'
+        WRITE(*,'(A,F0.1,A,F0.1)') '         λ range: ', eigvals_diag(1), ' to ', eigvals_diag(n)
+        
+        DEALLOCATE(eigvecs, eigvecs_inv, eigvals_diag, ipiv)
         
         ! --- Step 1: Initialize and normalize first Krylov vector ---
         ! CRITICAL: For diagonal test matrix, use RANDOM vector to explore all eigenspaces
@@ -245,7 +292,33 @@ CONTAINS
             ! --- Step 5: Compute Ritz vectors (transform back to full space) ---
             ! Ritz vectors: eigenvectors = V * evec_right
             ! V is n×m, evec_right is m×m, result is n×m
-            eigenvectors = MATMUL(V(:, 1:m), evec_right)
+            ! CRITICAL: Handle complex eigenvectors correctly
+            ! When eigenvalues are complex conjugate pairs, DGEEV stores them specially:
+            ! - If eval_imag(j) > 0: evec_right(:,j) + i*evec_right(:,j+1)
+            ! - If eval_imag(j) < 0: evec_right(:,j) - i*evec_right(:,j+1)
+            ! - If eval_imag(j) = 0: evec_right(:,j) is real
+            
+            i = 1
+            DO WHILE (i <= m)
+                IF (ABS(eval_imag(i)) < 1.0E-14_rk) THEN
+                    ! Real eigenvalue: real eigenvector
+                    eigenvectors(:, i) = CMPLX(MATMUL(V(:, 1:m), evec_right(:, i)), 0.0_rk, KIND=rk)
+                    i = i + 1
+                ELSE IF (eval_imag(i) > 0.0_rk) THEN
+                    ! Complex conjugate pair: (λ, λ*) with eigenvectors (v, v*)
+                    ! evec_right(:,i) is real part, evec_right(:,i+1) is imag part
+                    eigenvectors(:, i) = CMPLX(MATMUL(V(:, 1:m), evec_right(:, i)), &
+                                               MATMUL(V(:, 1:m), evec_right(:, i+1)), KIND=rk)
+                    IF (i+1 <= m) THEN
+                        eigenvectors(:, i+1) = CMPLX(MATMUL(V(:, 1:m), evec_right(:, i)), &
+                                                     -MATMUL(V(:, 1:m), evec_right(:, i+1)), KIND=rk)
+                    END IF
+                    i = i + 2
+                ELSE
+                    ! This is the conjugate (already handled)
+                    i = i + 1
+                END IF
+            END DO
             
             DEALLOCATE(work_lapack)
             
