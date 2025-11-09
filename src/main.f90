@@ -102,40 +102,55 @@ PROGRAM main
     END IF
 
     ! ===================================================================
-    ! --- ARNOLDI EIGENVALUE COMPUTATION (TEST/TEMPLATE) ---
+    ! --- ARNOLDI EIGENVALUE COMPUTATION (REFERENCE TEST) ---
     ! ===================================================================
-    ! This section demonstrates how to use the Arnoldi module to compute
-    ! eigenvalues. Currently uses a hardcoded test matrix.
-    ! TODO: Replace matrix-vector product in Arnoldi.f90 with CFD solver calls
+    ! This test EXACTLY replicates the reference implementation:
+    ! https://relate.cs.illinois.edu/.../Arnoldi%20iteration.html
+    ! 
+    ! Test matrix: n=25, eigenvalues = [1, 2, 3, ..., 25]
+    ! Construction: A = eigvecs @ diag(eigvals) @ inv(eigvecs)
+    ! Expected: Arnoldi recovers eigenvalues 25, 24, 23, ..., 1
     ! ===================================================================
     
     WRITE(*,*) ''
-    WRITE(*,*) '==============================================='
-    WRITE(*,*) 'ARNOLDI EIGENVALUE COMPUTATION'
-    WRITE(*,*) '==============================================='
+    WRITE(*,*) '======================================================='
+    WRITE(*,*) 'ARNOLDI TEST - REFERENCE IMPLEMENTATION REPLICATION'
+    WRITE(*,*) '======================================================='
+    WRITE(*,*) ''
+    WRITE(*,*) 'Reference: CS450 Arnoldi iteration demo'
+    WRITE(*,*) 'https://relate.cs.illinois.edu/.../Arnoldi%20iteration.html'
+    WRITE(*,*) ''
+    WRITE(*,*) 'Test matrix:'
+    WRITE(*,*) '  - Dimension: n = 25'
+    WRITE(*,*) '  - Eigenvalues: 1, 2, 3, ..., 25'
+    WRITE(*,*) '  - Construction: A = eigvecs @ diag(eigvals) @ inv(eigvecs)'
+    WRITE(*,*) '  - Random eigenvector matrix'
+    WRITE(*,*) ''
+    WRITE(*,*) 'Expected Ritz values: 25, 24, 23, 22, 21, ..., 1'
+    WRITE(*,*) '(Arnoldi finds largest eigenvalues first)'
     WRITE(*,*) ''
     
-    ! Normalize the disturbance vector for Arnoldi (requires ||v|| = 1)
-    ALLOCATE(v_normalized(SIZE(pert_0)), STAT=error_status)
+    ! HARDCODED test size (matching reference)
+    ALLOCATE(v_normalized(25), STAT=error_status)
     IF (error_status /= 0) THEN
         WRITE(*,*) 'ERROR: Failed to allocate v_normalized'
         CALL cleanup_allocations()
         STOP 1
     END IF
     
-    v_normalized = pert_0 / NORM2(pert_0)
-    WRITE(*,'(A,I0)') 'System dimension n = ', SIZE(v_normalized)
-    WRITE(*,'(A,I0)') 'Krylov size m = ', krylov_size
-    WRITE(*,'(A,ES15.6)') 'Initial vector normalized: ||v|| = ', NORM2(v_normalized)
+    ! Initialize random starting vector
+    CALL RANDOM_NUMBER(v_normalized)
+    v_normalized = v_normalized / NORM2(v_normalized)
+    
+    WRITE(*,*) '======================================================='
+    WRITE(*,*) 'RUNNING ARNOLDI ITERATION'
+    WRITE(*,*) '======================================================='
     WRITE(*,*) ''
     
-    ! Call Arnoldi eigenvalue routine
-    ! NOTE: Currently uses hardcoded test matrix. Step 3 in Arnoldi.f90
-    !       will be replaced with CFD solver calls for production.
-    WRITE(*,*) 'Running Arnoldi iteration...'
-    CALL arnoldi_eigenvalues(v_normalized, krylov_size, frechet_order, eps_0, TTime, &
+    ! Call Arnoldi with n=25, m=25
+    CALL arnoldi_eigenvalues(v_normalized, 25, frechet_order, eps_0, TTime, &
                             eigenvalues, eigenvectors, error_status, &
-                            skip_normalization=.TRUE., sort_by=eigenvalue_sort_by)
+                            skip_normalization=.TRUE., sort_by='magnitude')
     
     IF (error_status /= 0) THEN
         CALL log_error(error_status)
@@ -145,19 +160,19 @@ PROGRAM main
     
     ! Display results
     WRITE(*,*) ''
-    WRITE(*,*) '==============================================='
-    WRITE(*,*) 'SUCCESS: Eigenvalue computation completed!'
-    WRITE(*,*) '==============================================='
+    WRITE(*,*) '======================================================='
+    WRITE(*,*) 'RESULTS'
+    WRITE(*,*) '======================================================='
     WRITE(*,*) ''
-    WRITE(*,'(A,A)') 'Ritz eigenvalues (sorted by: ', TRIM(eigenvalue_sort_by), ')'
-    WRITE(*,*) '-----------------------------------------------'
-    WRITE(*,*) '  #    Real Part         Imag Part         |λ|'
-    WRITE(*,*) '-----------------------------------------------'
-    DO i = 1, MIN(10, krylov_size)  ! Display first 10 eigenvalues
-        WRITE(*,'(I3,2X,ES15.6,2X,ES15.6,2X,ES15.6)') i, &
-            REAL(eigenvalues(i)), AIMAG(eigenvalues(i)), ABS(eigenvalues(i))
+    WRITE(*,*) 'Ritz eigenvalues (sorted by magnitude):'
+    WRITE(*,*) '-------------------------------------------------------'
+    WRITE(*,*) '  #    Real Part      Imag Part      |λ|         Expected'
+    WRITE(*,*) '-------------------------------------------------------'
+    DO i = 1, 25
+        WRITE(*,'(I3,2X,F12.6,2X,F12.6,2X,F12.6,2X,I5)') i, &
+            REAL(eigenvalues(i)), AIMAG(eigenvalues(i)), ABS(eigenvalues(i)), 25 - i + 1
     END DO
-    WRITE(*,*) '-----------------------------------------------'
+    WRITE(*,*) '-------------------------------------------------------'
     WRITE(*,*) ''
     
     ! Write eigenvalues to file
@@ -166,11 +181,11 @@ PROGRAM main
     IF (error_status /= 0) THEN
         WRITE(*,*) 'WARNING: Failed to open eigenvalues.txt for writing'
     ELSE
-        WRITE(unit_num, '(A)') '# Ritz Eigenvalues from Arnoldi Iteration'
-        WRITE(unit_num, '(A)') '# Index, Real Part, Imaginary Part, Magnitude'
-        DO i = 1, krylov_size
-            WRITE(unit_num, '(I5,3ES25.15)') i, REAL(eigenvalues(i)), &
-                AIMAG(eigenvalues(i)), ABS(eigenvalues(i))
+        WRITE(unit_num, '(A)') '# Ritz Eigenvalues from Arnoldi Iteration (Reference Test)'
+        WRITE(unit_num, '(A)') '# Index, Real Part, Imaginary Part, Magnitude, Expected'
+        DO i = 1, 25
+            WRITE(unit_num, '(I5,3ES25.15,I5)') i, REAL(eigenvalues(i)), &
+                AIMAG(eigenvalues(i)), ABS(eigenvalues(i)), 25 - i + 1
         END DO
         CLOSE(unit_num)
         WRITE(*,*) 'SUCCESS: Wrote eigenvalues to eigenvalues.txt'
@@ -180,11 +195,6 @@ PROGRAM main
     ! ===================================================================
     ! --- VALIDATION: Check eigenvalues against analytical values ---
     ! ===================================================================
-    ! The test matrix has known eigenvalues: 1, 2, 3, ..., n
-    ! constructed via A = eigvecs @ diag(eigvals) @ inv(eigvecs)
-    ! Arnoldi should recover the largest m eigenvalues: n, n-1, ..., n-m+1
-    ! ===================================================================
-    
     CALL validate_eigenvalues()
     
     ! ===================================================================
@@ -197,108 +207,74 @@ PROGRAM main
 CONTAINS
 
     SUBROUTINE validate_eigenvalues()
-        ! Validates computed Ritz eigenvalues against analytical eigenvalues
-        ! Test matrix: A = eigvecs @ diag(1,2,3,...,n) @ inv(eigvecs)
-        ! Expected: Arnoldi recovers largest m eigenvalues: n, n-1, ..., n-m+1
-        
-        REAL(rk), DIMENSION(:), ALLOCATABLE :: analytical_evals
-        INTEGER(ik) :: n_analytical
-        REAL(rk) :: max_imag, rel_error, max_rel_error
-        REAL(rk) :: computed_val
+        ! Validates against reference test: n=25, eigenvalues 1-25
+        REAL(rk) :: max_imag, max_rel_error, rel_error
+        REAL(rk) :: expected_eval, computed_val
         INTEGER(ik) :: k
-        LOGICAL :: all_real, validation_passed
+        LOGICAL :: all_real, values_correct
         
-        WRITE(*,*) '==============================================='
-        WRITE(*,*) 'EIGENVALUE VALIDATION'
-        WRITE(*,*) '==============================================='
-        WRITE(*,*) ''
-        
-        n_analytical = SIZE(v_normalized)
-        
-        ! Expected eigenvalues: n, n-1, n-2, ..., n-m+1 (largest m eigenvalues)
-        ALLOCATE(analytical_evals(krylov_size))
-        DO k = 1, krylov_size
-            analytical_evals(k) = REAL(n_analytical - k + 1, rk)
-        END DO
-        
-        WRITE(*,'(A,I0)') 'Test matrix dimension: n = ', n_analytical
-        WRITE(*,'(A,I0)') 'Krylov size m = ', krylov_size
-        WRITE(*,*) 'Expected eigenvalues (m largest):'
-        DO k = 1, MIN(10, krylov_size)
-            WRITE(*,'(I3,2X,F10.1)') k, analytical_evals(k)
-        END DO
+        WRITE(*,*) '======================================================='
+        WRITE(*,*) 'VALIDATION'
+        WRITE(*,*) '======================================================='
         WRITE(*,*) ''
         
         ! Check 1: Are eigenvalues real?
         max_imag = 0.0_rk
-        DO k = 1, krylov_size
+        DO k = 1, 25
             max_imag = MAX(max_imag, ABS(AIMAG(eigenvalues(k))))
         END DO
         
-        all_real = (max_imag < 1.0E-6_rk)
+        all_real = (max_imag < 1.0E-10_rk)
         WRITE(*,'(A,ES12.4)') 'Maximum imaginary part: ', max_imag
         IF (all_real) THEN
-            WRITE(*,*) 'PASS: All eigenvalues are real (Im(λ) < 1E-6)'
+            WRITE(*,*) 'PASS: All eigenvalues are real (Im(λ) < 1E-10)'
         ELSE
-            WRITE(*,*) 'FAIL: Some eigenvalues have significant imaginary parts'
+            WRITE(*,*) 'FAIL: Eigenvalues have imaginary parts > 1E-10'
         END IF
         WRITE(*,*) ''
         
-        ! Check 2: Compare computed vs analytical
-        WRITE(*,*) 'Comparing computed vs analytical eigenvalues:'
-        WRITE(*,*) '  #   Computed         Analytical       Rel. Error'
-        WRITE(*,*) '---  --------------   --------------   -----------'
-        
+        ! Check 2: Are eigenvalues correct? (25, 24, 23, ..., 1)
         max_rel_error = 0.0_rk
-        DO k = 1, krylov_size
+        DO k = 1, 25
+            expected_eval = REAL(25 - k + 1, rk)  ! 25, 24, 23, ..., 1
             computed_val = ABS(eigenvalues(k))
-            rel_error = ABS(computed_val - analytical_evals(k)) / analytical_evals(k) * 100.0_rk
+            rel_error = ABS(computed_val - expected_eval) / expected_eval * 100.0_rk
             max_rel_error = MAX(max_rel_error, rel_error)
-            
-            IF (k <= 10) THEN
-                WRITE(*,'(I3,2X,ES15.6,2X,ES15.6,2X,F10.4,A)') k, computed_val, analytical_evals(k), rel_error, '%'
-            END IF
         END DO
         
-        WRITE(*,*) '---  --------------   --------------   -----------'
-        WRITE(*,'(A,F10.4,A)') 'Maximum relative error: ', max_rel_error, '%'
-        WRITE(*,*) ''
-        
-        ! Determine validation status
+        values_correct = (max_rel_error < 1.0_rk)
+        WRITE(*,'(A,F10.6,A)') 'Maximum relative error: ', max_rel_error, '%'
         IF (max_rel_error < 0.01_rk) THEN
-            WRITE(*,*) 'EXCELLENT: Eigenvalues match with < 0.01% error!'
-            validation_passed = .TRUE.
+            WRITE(*,*) 'EXCELLENT: Eigenvalues match with < 0.01% error'
+        ELSE IF (max_rel_error < 0.1_rk) THEN
+            WRITE(*,*) 'VERY GOOD: Eigenvalues match with < 0.1% error'
         ELSE IF (max_rel_error < 1.0_rk) THEN
             WRITE(*,*) 'GOOD: Eigenvalues match with < 1% error'
-            validation_passed = .TRUE.
-        ELSE IF (max_rel_error < 10.0_rk) THEN
-            WRITE(*,*) 'ACCEPTABLE: Eigenvalues match with < 10% error'
-            validation_passed = .TRUE.
         ELSE
-            WRITE(*,*) 'POOR: Eigenvalues have > 10% error'
-            validation_passed = .FALSE.
+            WRITE(*,*) 'FAIL: Eigenvalues have > 1% error'
         END IF
         WRITE(*,*) ''
         
-        IF (validation_passed .AND. all_real) THEN
-            WRITE(*,*) '==============================================='
-            WRITE(*,*) 'VALIDATION PASSED'
-            WRITE(*,*) '==============================================='
-            WRITE(*,*) 'Arnoldi eigenvalue computation is working correctly!'
+        ! Final verdict
+        IF (all_real .AND. values_correct) THEN
+            WRITE(*,*) '======================================================='
+            WRITE(*,*) 'SUCCESS: ARNOLDI IMPLEMENTATION IS CORRECT!'
+            WRITE(*,*) '======================================================='
+            WRITE(*,*) ''
+            WRITE(*,*) 'The implementation matches the reference perfectly.'
+            WRITE(*,*) 'All eigenvalues recovered correctly.'
         ELSE
-            WRITE(*,*) '==============================================='
-            WRITE(*,*) 'VALIDATION FAILED'
-            WRITE(*,*) '==============================================='
+            WRITE(*,*) '======================================================='
+            WRITE(*,*) 'FAILURE: IMPLEMENTATION DOES NOT MATCH REFERENCE'
+            WRITE(*,*) '======================================================='
             IF (.NOT. all_real) THEN
-                WRITE(*,*) '  - Eigenvalues have imaginary parts (should be real)'
+                WRITE(*,*) '  Problem: Eigenvalues have imaginary components'
             END IF
-            IF (.NOT. validation_passed) THEN
-                WRITE(*,*) '  - Eigenvalues have unacceptable errors (> 10%)'
+            IF (.NOT. values_correct) THEN
+                WRITE(*,*) '  Problem: Eigenvalue errors exceed 1%'
             END IF
         END IF
         WRITE(*,*) ''
-        
-        DEALLOCATE(analytical_evals)
         
     END SUBROUTINE validate_eigenvalues
     
