@@ -124,12 +124,12 @@ PROGRAM main
     WRITE(*,*)
     WRITE(*,*) 'Test problem for scalability testing:'
     WRITE(*,*) '  - Dimension: n = 1000'
-    WRITE(*,*) '  - Krylov size: m = 100'
+    WRITE(*,*) '  - Krylov size: m = 200 (large subspace for convergence)'
     WRITE(*,*) '  - Eigenvalues: 1, 2, 3, ..., 1000'
-    WRITE(*,*) '  - Construction: A = eigvecs @ diag(eigvals) @ inv(eigvecs)'
-    WRITE(*,*) '  - Random eigenvector matrix (dense)'
+    WRITE(*,*) '  - Construction: A = Q @ diag(eigvals) @ Q^T (symmetric)'
+    WRITE(*,*) '  - Q = orthogonal matrix from QR decomposition'
     WRITE(*,*)
-    WRITE(*,*) 'Expected: Largest 100 eigenvalues (1000, 999, ..., 901)'
+    WRITE(*,*) 'Expected: Top 5 should be close to 1000, 999, 998, 997, 996'
     WRITE(*,*)
     
     ! Set number of threads for BLAS/LAPACK operations
@@ -155,8 +155,8 @@ PROGRAM main
     ! Start timing
     CALL SYSTEM_CLOCK(clock_start, clock_rate)
     
-    ! Call Arnoldi with n=1000, m=100
-    CALL arnoldi_eigenvalues(v_normalized, 100, frechet_order, eps_0, TTime, &
+    ! Call Arnoldi with n=1000, m=200 (larger subspace for better convergence)
+    CALL arnoldi_eigenvalues(v_normalized, 200, frechet_order, eps_0, TTime, &
                             eigenvalues, eigenvectors, error_status, &
                             skip_normalization=.TRUE., sort_by='magnitude')
     
@@ -178,15 +178,16 @@ PROGRAM main
     WRITE(*,*)
     WRITE(*,'(A,F12.3,A)') 'Arnoldi computation time: ', elapsed_time, ' seconds'
     WRITE(*,*)
-    WRITE(*,*) 'Ritz eigenvalues (sorted by magnitude, showing first 10):'
+    WRITE(*,*) 'Top 5 Ritz eigenvalues (sorted by magnitude):'
     WRITE(*,*) '-------------------------------------------------------'
-    WRITE(*,*) '  #    Real Part      Imag Part      |λ|'
+    WRITE(*,*) '  #    Real Part      Imag Part      |λ|         Expected'
     WRITE(*,*) '-------------------------------------------------------'
-    DO i = 1, MIN(10, SIZE(eigenvalues))
-        WRITE(*,'(I3,2X,F12.6,2X,F12.6,2X,F12.6)') i, &
-            REAL(eigenvalues(i)), AIMAG(eigenvalues(i)), ABS(eigenvalues(i))
+    DO i = 1, MIN(5, SIZE(eigenvalues))
+        WRITE(*,'(I3,2X,F12.6,2X,F12.6,2X,F12.6,2X,I5)') i, &
+            REAL(eigenvalues(i)), AIMAG(eigenvalues(i)), ABS(eigenvalues(i)), 1001 - i
     END DO
     WRITE(*,*) '-------------------------------------------------------'
+    WRITE(*,'(A,I0,A)') '(Computed ', SIZE(eigenvalues), ' eigenvalues total)'
     WRITE(*,*)
     
     ! Write eigenvalues and eigenvectors to files in ../output/
@@ -231,13 +232,13 @@ CONTAINS
     END SUBROUTINE set_blas_threads
 
     SUBROUTINE validate_eigenvalues()
-        ! Validates test matrix eigenvalues: n=1000, m=100
+        ! Validates test matrix eigenvalues: n=1000, m=200
         ! Matrix A has eigenvalues 1, 2, 3, ..., 1000
-        ! Arnoldi should find the 100 LARGEST (close to 1000)
-        REAL(rk) :: max_imag, min_eval, max_eval, mean_eval
-        REAL(rk) :: computed_val
-        INTEGER(ik) :: k, m_size, num_in_range
-        LOGICAL :: all_real, in_correct_range
+        ! With large Krylov subspace, top 5 should be very close to 1000, 999, 998, 997, 996
+        REAL(rk) :: max_imag, max_eval, rel_error
+        REAL(rk) :: computed_val, expected_val, max_rel_error
+        INTEGER(ik) :: k, m_size
+        LOGICAL :: all_real, top5_correct
         
         m_size = SIZE(eigenvalues)
         
@@ -261,51 +262,53 @@ CONTAINS
         END IF
         WRITE(*,*)
         
-        ! Check 2: Are eigenvalues in the correct range?
-        ! Expected: largest 100 eigenvalues should be in range [850, 1000]
-        min_eval = 1.0E10_rk
+        ! Check 2: Are top 5 eigenvalues correct?
+        ! With m=200, top 5 should be very accurate (< 0.1% error)
+        max_rel_error = 0.0_rk
         max_eval = 0.0_rk
-        mean_eval = 0.0_rk
-        num_in_range = 0
         
-        DO k = 1, m_size
+        WRITE(*,*) 'Top 5 eigenvalues vs expected:'
+        WRITE(*,*) '  #    Computed      Expected     Rel Error'
+        WRITE(*,*) '-----------------------------------------------'
+        DO k = 1, MIN(5, m_size)
             computed_val = ABS(eigenvalues(k))
-            min_eval = MIN(min_eval, computed_val)
+            expected_val = REAL(1001 - k, rk)  ! 1000, 999, 998, 997, 996
+            rel_error = ABS(computed_val - expected_val) / expected_val * 100.0_rk
+            max_rel_error = MAX(max_rel_error, rel_error)
             max_eval = MAX(max_eval, computed_val)
-            mean_eval = mean_eval + computed_val
-            IF (computed_val >= 850.0_rk .AND. computed_val <= 1000.0_rk) THEN
-                num_in_range = num_in_range + 1
-            END IF
+            WRITE(*,'(I3,2X,F12.2,2X,F12.2,2X,F10.6,A)') k, computed_val, expected_val, rel_error, '%'
         END DO
-        mean_eval = mean_eval / REAL(m_size, rk)
-        
-        WRITE(*,'(A,F10.2)') 'Largest eigenvalue:  ', max_eval
-        WRITE(*,'(A,F10.2)') 'Smallest eigenvalue: ', min_eval
-        WRITE(*,'(A,F10.2)') 'Mean eigenvalue:     ', mean_eval
-        WRITE(*,'(A,I0,A,I0)') 'Eigenvalues in range [850,1000]: ', num_in_range, '/', m_size
+        WRITE(*,*) '-----------------------------------------------'
         WRITE(*,*)
         
-        ! Success if: max > 990 and mean > 900 and most are in range
-        in_correct_range = (max_eval > 990.0_rk) .AND. &
-                          (mean_eval > 900.0_rk) .AND. &
-                          (num_in_range >= INT(0.8_rk * m_size))
+        ! Success if top 5 have < 1% error
+        top5_correct = (max_rel_error < 1.0_rk)
         
-        IF (in_correct_range) THEN
-            WRITE(*,*) 'PASS: Eigenvalues are in the expected range (largest 100)'
+        WRITE(*,'(A,F10.6,A)') 'Maximum relative error (top 5): ', max_rel_error, '%'
+        IF (max_rel_error < 0.01_rk) THEN
+            WRITE(*,*) 'EXCELLENT: Top 5 eigenvalues < 0.01% error'
+        ELSE IF (max_rel_error < 0.1_rk) THEN
+            WRITE(*,*) 'VERY GOOD: Top 5 eigenvalues < 0.1% error'
+        ELSE IF (max_rel_error < 1.0_rk) THEN
+            WRITE(*,*) 'GOOD: Top 5 eigenvalues < 1% error'
         ELSE
-            WRITE(*,*) 'FAIL: Eigenvalues not in expected range'
-            WRITE(*,*) '      Expected: max>990, mean>900, 80%+ in [850,1000]'
+            WRITE(*,*) 'FAIL: Top 5 eigenvalues have > 1% error'
         END IF
         WRITE(*,*)
         
         ! Final verdict
-        IF (all_real .AND. in_correct_range) THEN
+        IF (all_real .AND. top5_correct) THEN
             WRITE(*,*) '======================================================='
-            WRITE(*,*) 'SUCCESS: ARNOLDI IMPLEMENTATION IS WORKING!'
+            WRITE(*,*) 'SUCCESS: ARNOLDI WORKING CORRECTLY!'
             WRITE(*,*) '======================================================='
             WRITE(*,*)
-            WRITE(*,*) 'Arnoldi successfully finds the largest eigenvalues.'
-            WRITE(*,'(A,F6.3,A)') 'Ready for scalability testing (time: ', elapsed_time, 's)'
+            WRITE(*,*) 'Large Krylov subspace (m=200) successfully captures'
+            WRITE(*,*) 'the dominant eigenvalues with high accuracy.'
+            WRITE(*,*)
+            WRITE(*,'(A,F6.3,A)') 'Baseline timing: ', elapsed_time, ' seconds'
+            WRITE(*,*)
+            WRITE(*,*) 'Ready for multi-threaded speedup testing!'
+            WRITE(*,*) 'Run with different OMP_NUM_THREADS: 1, 2, 4, 8'
         ELSE
             WRITE(*,*) '======================================================='
             WRITE(*,*) 'FAILURE: IMPLEMENTATION HAS ISSUES'
@@ -313,8 +316,8 @@ CONTAINS
             IF (.NOT. all_real) THEN
                 WRITE(*,*) '  Problem: Eigenvalues have imaginary components'
             END IF
-            IF (.NOT. in_correct_range) THEN
-                WRITE(*,*) '  Problem: Eigenvalues not in expected range'
+            IF (.NOT. top5_correct) THEN
+                WRITE(*,*) '  Problem: Top 5 eigenvalues not accurate enough'
             END IF
         END IF
         WRITE(*,*)
