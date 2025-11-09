@@ -211,30 +211,20 @@ PROGRAM main
 CONTAINS
 
     SUBROUTINE set_blas_threads(nthreads)
-        ! Sets the number of threads for OpenBLAS/MKL
-        ! nthreads = 0: Use all available cores (automatic)
-        ! nthreads > 0: Use specified number of threads
+        ! Displays thread configuration for BLAS/LAPACK
+        ! Note: Set environment variables BEFORE running the program:
+        !   export OMP_NUM_THREADS=4
+        !   export OPENBLAS_NUM_THREADS=4
         INTEGER(ik), INTENT(IN) :: nthreads
-        CHARACTER(len=20) :: threads_str
-        INTEGER(ik) :: actual_threads
         
         IF (nthreads <= 0) THEN
-            ! Auto mode - let BLAS decide (uses all cores)
-            CALL setenv('OMP_NUM_THREADS', '', 1)
-            CALL setenv('OPENBLAS_NUM_THREADS', '', 1)
-            CALL setenv('MKL_NUM_THREADS', '', 1)
-            WRITE(*,*) 'BLAS threading: AUTO (using all available cores)'
+            WRITE(*,*) 'BLAS threading: AUTO mode (using all available cores)'
+            WRITE(*,*) 'To limit cores, set OMP_NUM_THREADS before running'
         ELSE
-            ! Manual mode - set specific thread count
-            actual_threads = nthreads
-            WRITE(threads_str, '(I0)') actual_threads
-            
-            ! Set for different BLAS implementations
-            CALL setenv('OMP_NUM_THREADS', TRIM(threads_str), 1)
-            CALL setenv('OPENBLAS_NUM_THREADS', TRIM(threads_str), 1)
-            CALL setenv('MKL_NUM_THREADS', TRIM(threads_str), 1)
-            
-            WRITE(*,'(A,I0,A)') 'BLAS threading: Using ', actual_threads, ' thread(s)'
+            WRITE(*,'(A,I0,A)') 'BLAS threading: Requesting ', nthreads, ' thread(s)'
+            WRITE(*,*) 'Set these before running for OpenBLAS/MKL:'
+            WRITE(*,'(A,I0)') '  export OMP_NUM_THREADS=', nthreads
+            WRITE(*,'(A,I0)') '  export OPENBLAS_NUM_THREADS=', nthreads
         END IF
         WRITE(*,*)
         
