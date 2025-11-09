@@ -22,6 +22,10 @@ PROGRAM main
     COMPLEX(rk), DIMENSION(:), ALLOCATABLE :: eigenvalues
     COMPLEX(rk), DIMENSION(:,:), ALLOCATABLE :: eigenvectors
     REAL(rk), DIMENSION(:), ALLOCATABLE :: v_normalized
+    
+    ! Timing variables
+    INTEGER :: clock_start, clock_end, clock_rate
+    REAL(rk) :: elapsed_time
 
     ! Read configuration
     CALL configurationRead(error_status)
@@ -108,9 +112,9 @@ PROGRAM main
     ! This test EXACTLY replicates the reference implementation:
     ! https://relate.cs.illinois.edu/.../Arnoldi%20iteration.html
     ! 
-    ! Test matrix: n=25, eigenvalues = [1, 2, 3, ..., 25]
+    ! Test matrix: n=1000, eigenvalues = [1, 2, 3, ..., 1000]
     ! Construction: A = eigvecs @ diag(eigvals) @ inv(eigvecs)
-    ! Expected: Arnoldi recovers eigenvalues 25, 24, 23, ..., 1
+    ! Expected: Arnoldi recovers largest 100 eigenvalues: 1000, 999, ..., 901
     ! ===================================================================
     
     WRITE(*,*)
@@ -118,24 +122,21 @@ PROGRAM main
     WRITE(*,*) 'ARNOLDI TEST - REFERENCE IMPLEMENTATION REPLICATION'
     WRITE(*,*) '======================================================='
     WRITE(*,*)
-    WRITE(*,*) 'Reference: CS450 Arnoldi iteration demo'
-    WRITE(*,*) 'https://relate.cs.illinois.edu/.../Arnoldi%20iteration.html'
-    WRITE(*,*)
-    WRITE(*,*) 'Test matrix:'
-    WRITE(*,*) '  - Dimension: n = 25'
-    WRITE(*,*) '  - Eigenvalues: 1, 2, 3, ..., 25'
+    WRITE(*,*) 'Test problem for scalability testing:'
+    WRITE(*,*) '  - Dimension: n = 1000'
+    WRITE(*,*) '  - Krylov size: m = 100'
+    WRITE(*,*) '  - Eigenvalues: 1, 2, 3, ..., 1000'
     WRITE(*,*) '  - Construction: A = eigvecs @ diag(eigvals) @ inv(eigvecs)'
-    WRITE(*,*) '  - Random eigenvector matrix'
+    WRITE(*,*) '  - Random eigenvector matrix (dense)'
     WRITE(*,*)
-    WRITE(*,*) 'Expected Ritz values: 25, 24, 23, 22, 21, ..., 1'
-    WRITE(*,*) '(Arnoldi finds largest eigenvalues first)'
+    WRITE(*,*) 'Expected: Largest 100 eigenvalues (1000, 999, ..., 901)'
     WRITE(*,*)
     
     ! Set number of threads for BLAS/LAPACK operations
     CALL set_blas_threads(num_threads)
     
-    ! HARDCODED test size (matching reference)
-    ALLOCATE(v_normalized(25), STAT=error_status)
+    ! HARDCODED test size for scalability testing
+    ALLOCATE(v_normalized(1000), STAT=error_status)
     IF (error_status /= 0) THEN
         WRITE(*,*) 'ERROR: Failed to allocate v_normalized'
         CALL cleanup_allocations()
@@ -151,10 +152,17 @@ PROGRAM main
     WRITE(*,*) '======================================================='
     WRITE(*,*)
     
-    ! Call Arnoldi with n=25, m=25
-    CALL arnoldi_eigenvalues(v_normalized, 25, frechet_order, eps_0, TTime, &
+    ! Start timing
+    CALL SYSTEM_CLOCK(clock_start, clock_rate)
+    
+    ! Call Arnoldi with n=1000, m=100
+    CALL arnoldi_eigenvalues(v_normalized, 100, frechet_order, eps_0, TTime, &
                             eigenvalues, eigenvectors, error_status, &
                             skip_normalization=.TRUE., sort_by='magnitude')
+    
+    ! End timing
+    CALL SYSTEM_CLOCK(clock_end)
+    elapsed_time = REAL(clock_end - clock_start, rk) / REAL(clock_rate, rk)
     
     IF (error_status /= 0) THEN
         CALL log_error(error_status)
@@ -168,13 +176,15 @@ PROGRAM main
     WRITE(*,*) 'RESULTS'
     WRITE(*,*) '======================================================='
     WRITE(*,*)
-    WRITE(*,*) 'Ritz eigenvalues (sorted by magnitude):'
+    WRITE(*,'(A,F12.3,A)') 'Arnoldi computation time: ', elapsed_time, ' seconds'
+    WRITE(*,*)
+    WRITE(*,*) 'Ritz eigenvalues (sorted by magnitude, showing first 10):'
     WRITE(*,*) '-------------------------------------------------------'
     WRITE(*,*) '  #    Real Part      Imag Part      |λ|         Expected'
     WRITE(*,*) '-------------------------------------------------------'
-    DO i = 1, 25
+    DO i = 1, MIN(10, SIZE(eigenvalues))
         WRITE(*,'(I3,2X,F12.6,2X,F12.6,2X,F12.6,2X,I5)') i, &
-            REAL(eigenvalues(i)), AIMAG(eigenvalues(i)), ABS(eigenvalues(i)), 25 - i + 1
+            REAL(eigenvalues(i)), AIMAG(eigenvalues(i)), ABS(eigenvalues(i)), 1000 - i + 1
     END DO
     WRITE(*,*) '-------------------------------------------------------'
     WRITE(*,*)
@@ -231,11 +241,13 @@ CONTAINS
     END SUBROUTINE set_blas_threads
 
     SUBROUTINE validate_eigenvalues()
-        ! Validates against reference test: n=25, eigenvalues 1-25
+        ! Validates against test: n=1000, m=100, eigenvalues 1-1000
         REAL(rk) :: max_imag, max_rel_error, rel_error
         REAL(rk) :: expected_eval, computed_val
-        INTEGER(ik) :: k
+        INTEGER(ik) :: k, m_size
         LOGICAL :: all_real, values_correct
+        
+        m_size = SIZE(eigenvalues)
         
         WRITE(*,*) '======================================================='
         WRITE(*,*) 'VALIDATION'
@@ -244,7 +256,7 @@ CONTAINS
         
         ! Check 1: Are eigenvalues real?
         max_imag = 0.0_rk
-        DO k = 1, 25
+        DO k = 1, m_size
             max_imag = MAX(max_imag, ABS(AIMAG(eigenvalues(k))))
         END DO
         
@@ -257,10 +269,10 @@ CONTAINS
         END IF
         WRITE(*,*)
         
-        ! Check 2: Are eigenvalues correct? (25, 24, 23, ..., 1)
+        ! Check 2: Are eigenvalues correct? (1000, 999, 998, ..., 901)
         max_rel_error = 0.0_rk
-        DO k = 1, 25
-            expected_eval = REAL(25 - k + 1, rk)  ! 25, 24, 23, ..., 1
+        DO k = 1, m_size
+            expected_eval = REAL(1000 - k + 1, rk)  ! 1000, 999, 998, ..., 901
             computed_val = ABS(eigenvalues(k))
             rel_error = ABS(computed_val - expected_eval) / expected_eval * 100.0_rk
             max_rel_error = MAX(max_rel_error, rel_error)
