@@ -46,6 +46,7 @@ CONTAINS
                                                       U_in(i), V_in(i), W_in(i)
         END DO
 
+
         CLOSE(unit_num)
 
         WRITE(*,*) 'SUCCESS: Flowfield data written to', TRIM(output_file)
