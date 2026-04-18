@@ -7,14 +7,12 @@ PROGRAM main
     USE call_CFD
     USE random_disturbance
     USE error_handling
-    USE Arnoldi
-    USE write_eigendata
     USE variables
     USE, INTRINSIC :: ISO_C_BINDING
 
     IMPLICIT NONE
-    
-    ! C interface for setenv
+
+    ! C interface for setenv (used by set_blas_threads utility below)
     INTERFACE
         FUNCTION c_setenv(name, value, overwrite) BIND(C, NAME="setenv")
             USE, INTRINSIC :: ISO_C_BINDING
@@ -24,49 +22,39 @@ PROGRAM main
         END FUNCTION c_setenv
     END INTERFACE
 
-    REAL(rk), DIMENSION(:), ALLOCATABLE :: rho_in, p_in, T_in, U_in, V_in, W_in, Xgrid, Ygrid, Zgrid, pert_0
+    REAL(rk), DIMENSION(:), ALLOCATABLE :: rho_in, p_in, T_in, U_in, V_in, W_in
+    REAL(rk), DIMENSION(:), ALLOCATABLE :: Xgrid, Ygrid, Zgrid, pert_0
     INTEGER(ik) :: data_count
     INTEGER(ik) :: error_status, STATUS_CODE
     INTEGER(ik) :: unit_num, i
-    
-    ! Arnoldi variables
-    COMPLEX(rk), DIMENSION(:), ALLOCATABLE :: eigenvalues
-    COMPLEX(rk), DIMENSION(:,:), ALLOCATABLE :: eigenvectors
-    REAL(rk), DIMENSION(:), ALLOCATABLE :: v_normalized
-    
-    ! Timing variables
-    INTEGER :: clock_start, clock_end, clock_rate
-    REAL(rk) :: elapsed_time
 
-    ! Read configuration
+    ! --- Read configuration ---
     CALL configurationRead(error_status)
     IF (error_status /= 0) THEN
         CALL log_error(ERR_MAIN_CONFIG)
         STOP ERR_MAIN_CONFIG
     END IF
 
-    ! Execute external command
+    ! --- Execute external command (run CFD solver once to generate base state) ---
     CALL run_simulation(COMMAND_RUN, STATUS_CODE)
     IF (STATUS_CODE /= 0) THEN
         CALL log_error(ERR_MAIN_EXT_CMD)
         STOP ERR_MAIN_EXT_CMD
     END IF
 
-    ! Continue with other code if STATUS_CODE is 0
     WRITE(*,*) 'PROCEEDING TO NEXT STEP.'
 
     ! --- Read Flowfield ---
-    ! Read flowfield data
     CALL read_flowfield(rho_in, p_in, T_in, U_in, V_in, W_in, &
                         Xgrid, Ygrid, Zgrid, data_count, error_status)
-    
+
     IF (error_status /= 0) THEN
         CALL log_error(ERR_MAIN_READ_FLOW)
         CALL cleanup_allocations()
         STOP ERR_MAIN_READ_FLOW
     END IF
 
-    ! Generate initial disturbance
+    ! --- Generate initial disturbance ---
     CALL initial_disturbance(data_count, dist_mag, pert_0, error_status)
     IF (error_status /= 0) THEN
         CALL log_error(ERR_MAIN_DISTURBANCE)
@@ -93,13 +81,13 @@ PROGRAM main
     END IF
     ! --- End TEMPORARY section ---
 
-    ! --- Write Flowfield ---
+    ! --- Write perturbed flowfield (base + disturbance) ---
     CALL write_flowfield(rho_in + pert_0, &
-                         p_in + pert_0, &
-                         T_in + pert_0, &
-                         U_in + pert_0, &
-                         V_in + pert_0, &
-                         W_in + pert_0, &
+                         p_in   + pert_0, &
+                         T_in   + pert_0, &
+                         U_in   + pert_0, &
+                         V_in   + pert_0, &
+                         W_in   + pert_0, &
                          data_count, error_status)
 
     IF (error_status /= 0) THEN
@@ -108,7 +96,7 @@ PROGRAM main
         STOP ERR_MAIN_WRITE_OUTPUT
     END IF
 
-    ! Write flowfield data to file
+    ! --- Write flowfield data to CSV ---
     CALL write_flowfield_data(Xgrid, Ygrid, Zgrid, rho_in, p_in, T_in, &
                               U_in, V_in, W_in, data_count, error_status)
     IF (error_status /= 0) THEN
@@ -117,259 +105,63 @@ PROGRAM main
         STOP ERR_MAIN_WRITE_OUTPUT
     END IF
 
-    ! ===================================================================
-    ! --- ARNOLDI EIGENVALUE COMPUTATION (REFERENCE TEST) ---
-    ! ===================================================================
-    ! This test EXACTLY replicates the reference implementation:
-    ! https://relate.cs.illinois.edu/.../Arnoldi%20iteration.html
-    ! 
-    ! Test matrix: n=7500, eigenvalues = [1, 2, 3, ..., 7500]
-    ! Construction: A = Q @ diag(eigvals) @ Q^T (symmetric, well-conditioned)
-    ! Expected: Arnoldi recovers largest eigenvalues close to 7500
-    ! ===================================================================
-    
-    WRITE(*,*)
-    WRITE(*,*) '======================================================='
-    WRITE(*,*) 'ARNOLDI TEST - REFERENCE IMPLEMENTATION REPLICATION'
-    WRITE(*,*) '======================================================='
-    WRITE(*,*)
-    WRITE(*,*) 'Test problem for scalability testing:'
-    WRITE(*,*) '  - Dimension: n = 7500'
-    WRITE(*,*) '  - Krylov size: m = 200'
-    WRITE(*,*) '  - Eigenvalues: 1, 2, 3, ..., 7500'
-    WRITE(*,*) '  - Construction: A = Q @ diag(eigvals) @ Q^T (symmetric)'
-    WRITE(*,*) '  - Q = orthogonal matrix from QR decomposition'
-    WRITE(*,*)
-    WRITE(*,*) 'Expected: Top 5 should be close to 7500, 7499, 7498, 7497, 7496'
-    WRITE(*,*)
-    
-    ! Set number of threads for BLAS/LAPACK operations
-    CALL set_blas_threads(num_threads)
-    
-    ! HARDCODED test size for scalability testing
-    ALLOCATE(v_normalized(7500), STAT=error_status)
-    IF (error_status /= 0) THEN
-        WRITE(*,*) 'ERROR: Failed to allocate v_normalized'
-        CALL cleanup_allocations()
-        STOP 1
-    END IF
-    
-    ! Initialize random starting vector
-    CALL RANDOM_NUMBER(v_normalized)
-    v_normalized = v_normalized / NORM2(v_normalized)
-    
-    WRITE(*,*) '======================================================='
-    WRITE(*,*) 'RUNNING ARNOLDI ITERATION'
-    WRITE(*,*) '======================================================='
-    WRITE(*,*)
-    
-    ! Start timing
-    CALL SYSTEM_CLOCK(clock_start, clock_rate)
-    
-    ! Call Arnoldi with n=1000, m=200 (larger subspace for better convergence)
-    CALL arnoldi_eigenvalues(v_normalized, 200, frechet_order, eps_0, TTime, &
-                            eigenvalues, eigenvectors, error_status, &
-                            skip_normalization=.TRUE., sort_by='magnitude')
-    
-    ! End timing
-    CALL SYSTEM_CLOCK(clock_end)
-    elapsed_time = REAL(clock_end - clock_start, rk) / REAL(clock_rate, rk)
-    
-    IF (error_status /= 0) THEN
-        CALL log_error(error_status)
-        CALL cleanup_allocations()
-        STOP error_status
-    END IF
-    
-    ! Display results
-    WRITE(*,*)
-    WRITE(*,*) '======================================================='
-    WRITE(*,*) 'RESULTS'
-    WRITE(*,*) '======================================================='
-    WRITE(*,*)
-    WRITE(*,'(A,F12.3,A)') 'Arnoldi computation time: ', elapsed_time, ' seconds'
-    WRITE(*,*)
-    WRITE(*,*) 'Top 5 Ritz eigenvalues (sorted by magnitude):'
-    WRITE(*,*) '-------------------------------------------------------'
-    WRITE(*,*) '  #    Real Part      Imag Part      |λ|         Expected'
-    WRITE(*,*) '-------------------------------------------------------'
-    DO i = 1, MIN(5, SIZE(eigenvalues))
-        WRITE(*,'(I3,2X,F12.6,2X,F12.6,2X,F12.6,2X,I5)') i, &
-            REAL(eigenvalues(i)), AIMAG(eigenvalues(i)), ABS(eigenvalues(i)), 7501 - i
-    END DO
-    WRITE(*,*) '-------------------------------------------------------'
-    WRITE(*,'(A,I0,A)') '(Computed ', SIZE(eigenvalues), ' eigenvalues total)'
-    WRITE(*,*)
-    
-    ! Write eigenvalues and eigenvectors to files in ../output/
-    CALL write_eigen_files(eigenvalues, eigenvectors, error_status)
-    IF (error_status /= 0) THEN
-        WRITE(*,*) 'WARNING: Failed to write eigendata files'
-    END IF
-    WRITE(*,*)
-    
-    ! ===================================================================
-    ! --- VALIDATION: Check eigenvalues against analytical values ---
-    ! ===================================================================
-    CALL validate_eigenvalues()
-    
-    ! ===================================================================
-    ! --- END ARNOLDI SECTION ---
-    ! ===================================================================
+    ! -------------------------------------------------------------------------
+    ! NOTE: The Arnoldi eigenvalue validation test (n=7500 reference problem)
+    ! has been removed. The real Arnoldi call needs a working Frechet-derivative
+    ! matvec in Arnoldi.f90 (currently a stub). Re-add the invocation here once
+    ! that stub is implemented. See:
+    !   - src/Arnoldi.f90 :: apply_linearized_operator (TODO stub)
+    !   - src/call_CFD.f90 :: run_simulation (solver advance)
+    !   - ERR_ARNOLDI_NOT_IMPLEMENTED in error_handling.f90
+    ! -------------------------------------------------------------------------
 
-    ! Cleanup allocated memory
+    ! --- Cleanup allocated memory ---
     CALL cleanup_allocations()
 
 CONTAINS
 
     SUBROUTINE set_blas_threads(nthreads)
-        ! Sets thread count for BLAS/LAPACK via environment variables
+        ! Sets thread count for BLAS/LAPACK via environment variables.
+        ! Unused today; intended for the real Arnoldi run once the matvec lands.
         INTEGER(ik), INTENT(IN) :: nthreads
-        CHARACTER(len=20) :: threads_str
+        CHARACTER(len=20)  :: threads_str
         CHARACTER(len=100) :: env_value
-        INTEGER(C_INT) :: result
-        INTEGER :: env_length, env_status
-        
+        INTEGER(C_INT)     :: result
+        INTEGER            :: env_length, env_status
+
         IF (nthreads <= 0) THEN
-            ! Auto mode: don't set limits
             WRITE(*,*)
             WRITE(*,*) 'BLAS threading: AUTO mode (using all available cores)'
         ELSE
-            ! Set specific thread count
             WRITE(threads_str, '(I0)') nthreads
-            
-            ! Set environment variables (C_NULL_CHAR terminates C strings)
             result = c_setenv('OMP_NUM_THREADS'//C_NULL_CHAR, &
                               TRIM(threads_str)//C_NULL_CHAR, 1_C_INT)
             result = c_setenv('OPENBLAS_NUM_THREADS'//C_NULL_CHAR, &
                               TRIM(threads_str)//C_NULL_CHAR, 1_C_INT)
             result = c_setenv('MKL_NUM_THREADS'//C_NULL_CHAR, &
                               TRIM(threads_str)//C_NULL_CHAR, 1_C_INT)
-            
+
             WRITE(*,*)
             WRITE(*,'(A,I0,A)') 'BLAS threading: Set to ', nthreads, ' thread(s)'
-            
-            ! Verify by reading back the environment variable
             CALL GET_ENVIRONMENT_VARIABLE('OMP_NUM_THREADS', env_value, env_length, env_status)
             IF (env_status == 0) THEN
                 WRITE(*,'(A,A)') 'Verified OMP_NUM_THREADS = ', TRIM(env_value)
             END IF
         END IF
-        WRITE(*,*)
-        WRITE(*,*) 'To verify threading is working:'
-        WRITE(*,*) '  - Run "htop" in another terminal while this runs'
-        WRITE(*,*) '  - Look for multiple CPU cores at ~100% usage'
-        WRITE(*,*)
-        
+
     END SUBROUTINE set_blas_threads
 
-    SUBROUTINE validate_eigenvalues()
-        ! Validates test matrix eigenvalues: n=7500, m=200
-        ! Matrix A has eigenvalues 1, 2, 3, ..., 7500
-        ! With large Krylov subspace, top 5 should be very close to 7500, 7499, 7498, 7497, 7496
-        REAL(rk) :: max_imag, max_eval, rel_error
-        REAL(rk) :: computed_val, expected_val, max_rel_error
-        INTEGER(ik) :: k, m_size
-        LOGICAL :: all_real, top5_correct
-        
-        m_size = SIZE(eigenvalues)
-        
-        WRITE(*,*) '======================================================='
-        WRITE(*,*) 'VALIDATION'
-        WRITE(*,*) '======================================================='
-        WRITE(*,*)
-        
-        ! Check 1: Are eigenvalues real?
-        max_imag = 0.0_rk
-        DO k = 1, m_size
-            max_imag = MAX(max_imag, ABS(AIMAG(eigenvalues(k))))
-        END DO
-        
-        all_real = (max_imag < 1.0E-10_rk)
-        WRITE(*,'(A,ES12.4)') 'Maximum imaginary part: ', max_imag
-        IF (all_real) THEN
-            WRITE(*,*) 'PASS: All eigenvalues are real (Im(λ) < 1E-10)'
-        ELSE
-            WRITE(*,*) 'FAIL: Eigenvalues have imaginary parts > 1E-10'
-        END IF
-        WRITE(*,*)
-        
-        ! Check 2: Are top 5 eigenvalues correct?
-        ! With m=200, top 5 should be very accurate (< 0.1% error)
-        max_rel_error = 0.0_rk
-        max_eval = 0.0_rk
-        
-        WRITE(*,*) 'Top 5 eigenvalues vs expected:'
-        WRITE(*,*) '  #    Computed      Expected     Rel Error'
-        WRITE(*,*) '-----------------------------------------------'
-        DO k = 1, MIN(5, m_size)
-            computed_val = ABS(eigenvalues(k))
-            expected_val = REAL(7501 - k, rk)  ! 7500, 7499, 7498, 7497, 7496
-            rel_error = ABS(computed_val - expected_val) / expected_val * 100.0_rk
-            max_rel_error = MAX(max_rel_error, rel_error)
-            max_eval = MAX(max_eval, computed_val)
-            WRITE(*,'(I3,2X,F12.2,2X,F12.2,2X,F10.6,A)') k, computed_val, expected_val, rel_error, '%'
-        END DO
-        WRITE(*,*) '-----------------------------------------------'
-        WRITE(*,*)
-        
-        ! Success if top 5 have < 1% error
-        top5_correct = (max_rel_error < 1.0_rk)
-        
-        WRITE(*,'(A,F10.6,A)') 'Maximum relative error (top 5): ', max_rel_error, '%'
-        IF (max_rel_error < 0.01_rk) THEN
-            WRITE(*,*) 'EXCELLENT: Top 5 eigenvalues < 0.01% error'
-        ELSE IF (max_rel_error < 0.1_rk) THEN
-            WRITE(*,*) 'VERY GOOD: Top 5 eigenvalues < 0.1% error'
-        ELSE IF (max_rel_error < 1.0_rk) THEN
-            WRITE(*,*) 'GOOD: Top 5 eigenvalues < 1% error'
-        ELSE
-            WRITE(*,*) 'FAIL: Top 5 eigenvalues have > 1% error'
-        END IF
-        WRITE(*,*)
-        
-        ! Final verdict
-        IF (all_real .AND. top5_correct) THEN
-            WRITE(*,*) '======================================================='
-            WRITE(*,*) 'SUCCESS: ARNOLDI WORKING CORRECTLY!'
-            WRITE(*,*) '======================================================='
-            WRITE(*,*)
-            WRITE(*,*) 'Large Krylov subspace (m=200) successfully captures'
-            WRITE(*,*) 'the dominant eigenvalues with high accuracy.'
-            WRITE(*,*)
-            WRITE(*,'(A,F6.3,A)') 'Baseline timing: ', elapsed_time, ' seconds'
-            WRITE(*,*)
-            WRITE(*,*) 'Ready for multi-threaded speedup testing!'
-            WRITE(*,*) 'Run with different OMP_NUM_THREADS: 1, 2, 4, 8'
-        ELSE
-            WRITE(*,*) '======================================================='
-            WRITE(*,*) 'FAILURE: IMPLEMENTATION HAS ISSUES'
-            WRITE(*,*) '======================================================='
-            IF (.NOT. all_real) THEN
-                WRITE(*,*) '  Problem: Eigenvalues have imaginary components'
-            END IF
-            IF (.NOT. top5_correct) THEN
-                WRITE(*,*) '  Problem: Top 5 eigenvalues not accurate enough'
-            END IF
-        END IF
-        WRITE(*,*)
-        
-    END SUBROUTINE validate_eigenvalues
-    
     SUBROUTINE cleanup_allocations()
-        IF (ALLOCATED(p_in)) DEALLOCATE(p_in)
+        IF (ALLOCATED(p_in))   DEALLOCATE(p_in)
         IF (ALLOCATED(rho_in)) DEALLOCATE(rho_in)
-        IF (ALLOCATED(T_in)) DEALLOCATE(T_in)
-        IF (ALLOCATED(U_in)) DEALLOCATE(U_in)
-        IF (ALLOCATED(V_in)) DEALLOCATE(V_in)
-        IF (ALLOCATED(W_in)) DEALLOCATE(W_in)
-        IF (ALLOCATED(Xgrid)) DEALLOCATE(Xgrid)
-        IF (ALLOCATED(Ygrid)) DEALLOCATE(Ygrid)
-        IF (ALLOCATED(Zgrid)) DEALLOCATE(Zgrid)
+        IF (ALLOCATED(T_in))   DEALLOCATE(T_in)
+        IF (ALLOCATED(U_in))   DEALLOCATE(U_in)
+        IF (ALLOCATED(V_in))   DEALLOCATE(V_in)
+        IF (ALLOCATED(W_in))   DEALLOCATE(W_in)
+        IF (ALLOCATED(Xgrid))  DEALLOCATE(Xgrid)
+        IF (ALLOCATED(Ygrid))  DEALLOCATE(Ygrid)
+        IF (ALLOCATED(Zgrid))  DEALLOCATE(Zgrid)
         IF (ALLOCATED(pert_0)) DEALLOCATE(pert_0)
-        IF (ALLOCATED(v_normalized)) DEALLOCATE(v_normalized)
-        IF (ALLOCATED(eigenvalues)) DEALLOCATE(eigenvalues)
-        IF (ALLOCATED(eigenvectors)) DEALLOCATE(eigenvectors)
     END SUBROUTINE cleanup_allocations
 
 END PROGRAM main

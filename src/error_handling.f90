@@ -69,6 +69,7 @@ MODULE error_handling
     INTEGER(ik), PARAMETER :: ERR_ARNOLDI_INVALID_KRYLOV = 803
     INTEGER(ik), PARAMETER :: ERR_ARNOLDI_ALLOC = 804
     INTEGER(ik), PARAMETER :: ERR_ARNOLDI_LAPACK = 805
+    INTEGER(ik), PARAMETER :: ERR_ARNOLDI_NOT_IMPLEMENTED = 806
     
     ! --- Eigendata Writing Module (900-999) ---
     INTEGER(ik), PARAMETER :: ERR_EIGENDATA_OPEN_EVAL = 901
@@ -95,7 +96,7 @@ MODULE error_handling
               ERR_CMD_LAUNCH_FAILED, ERR_CMD_NONZERO_EXIT, &
               ERR_DIST_INVALID_LENGTH, ERR_DIST_ALLOC, ERR_DIST_ZERO_NORM, &
               ERR_ARNOLDI_ZERO_V1, ERR_ARNOLDI_INVALID_DIM, ERR_ARNOLDI_INVALID_KRYLOV, &
-              ERR_ARNOLDI_ALLOC, ERR_ARNOLDI_LAPACK, &
+              ERR_ARNOLDI_ALLOC, ERR_ARNOLDI_LAPACK, ERR_ARNOLDI_NOT_IMPLEMENTED, &
               ERR_EIGENDATA_OPEN_EVAL, ERR_EIGENDATA_OPEN_EVEC, &
               ERR_EIGENDATA_WRITE_EVAL, ERR_EIGENDATA_WRITE_EVEC, &
               log_error, get_module_name, get_error_description
@@ -246,6 +247,8 @@ CONTAINS
                 description = "Memory allocation failed in Arnoldi"
             CASE (ERR_ARNOLDI_LAPACK)
                 description = "LAPACK eigenvalue computation failed"
+            CASE (ERR_ARNOLDI_NOT_IMPLEMENTED)
+                description = "Arnoldi matvec (Frechet derivative) not yet implemented"
                 
             ! Eigendata writing errors
             CASE (ERR_EIGENDATA_OPEN_EVAL)

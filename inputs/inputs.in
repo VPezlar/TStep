@@ -14,7 +14,7 @@
     flow_format = 'OpenFOAM',     ! Solver format: 'OpenFOAM', 'SU2', etc.
     output_file = '../output/flowfield.csv',  ! Path to CSV output file
     dist_mag    = 1.0d-3,         ! Magnitude for random disturbance scaling
-    COMMAND_RUN = 'mkdir -p test',  ! Simple command for testing (was: rhoCentralFoam)
+    COMMAND_RUN = 'rhoCentralFoam -case /home/vojtech-p/work/openfoam/OpenFOAM-v2506/tutorials/compressible/rhoCentralFoam/wedge15Ma5',  ! Simple command for testing (was: rhoCentralFoam)
 /
 
 ! Arnoldi Settings (for eigenvalue computation)
@@ -24,7 +24,7 @@
     eigenvalue_sort_by = 'magnitude',    ! Sort eigenvalues by: 'imaginary', 'real', or 'magnitude'
     eps_0 = 1.0d-6,                      ! Epsilon parameter (unused for now)
     TTime = 1.0,                         ! Time parameter (unused for now)
-    num_threads = 4,                     ! Number of BLAS/LAPACK threads (0 = auto, use all cores)
+    num_threads = 1,                     ! Number of BLAS/LAPACK threads (0 = auto, use all cores)
                                           ! IMPORTANT: On HPC login nodes, set to 2-4 to avoid overloading
                                           ! On compute nodes: 0 (auto) or match allocated cores
                                           ! Examples: 0 (auto), 1 (serial), 4 (quad-core), 8 (8-core)
