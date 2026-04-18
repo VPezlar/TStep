@@ -37,7 +37,7 @@ CONTAINS
         WRITE(*,*) 'Attempting to write data to:', TRIM(file_var_out)
         WRITE(*,*) 'Flowfield format:', TRIM(flow_format)
 
-        IF (flow_format == 'OpenFOAM') THEN
+        IF (TRIM(flow_format) == 'OpenFOAM') THEN
             ! Write Flowfield Variables
             CALL write_OF_scalars(TRIM(file_var_out)//'p', N_HEADER_var, p_out, data_count, error_status)
             IF (error_status /= 0) THEN
@@ -60,13 +60,19 @@ CONTAINS
                 RETURN
             END IF
 
-            CALL write_OF_vectors(TRIM(file_var_out)//'U', N_HEADER_grid, U_out, V_out, W_out, data_count, error_status)
+            CALL write_OF_vectors(TRIM(file_var_out)//'U', N_HEADER_var, U_out, V_out, W_out, data_count, error_status)
             IF (error_status /= 0) THEN
                 error_status = ERR_FLOW_VELOCITY
                 CALL log_error(ERR_FLOW_VELOCITY, 'File: '//TRIM(file_var_out)//'U')
                 RETURN
             END IF
 
+        ELSE
+            ! Unsupported format: fail loudly rather than silently no-op.
+            error_status = ERR_FLOW_UNKNOWN_FORMAT
+            CALL log_error(ERR_FLOW_UNKNOWN_FORMAT, &
+                'flow_format = '//TRIM(flow_format)//' (supported: OpenFOAM)')
+            RETURN
         END IF
 
         WRITE(*,*) 'SUCCESS: All data written successfully!'

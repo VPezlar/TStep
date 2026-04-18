@@ -10,6 +10,11 @@
 !   - grid cell centers X,Y,Z from file_grid_in
 ! Every failure maps to a specific ERR_FLOW_* code for clean reporting.
 !
+! Per-field data counts are verified against the first field read
+! (ERR_FLOW_COUNT_MISMATCH) to catch inconsistent flowfield files early.
+! Unknown flow_format values are rejected with ERR_FLOW_UNKNOWN_FORMAT rather
+! than silently returning an empty flowfield.
+!
 ! Contrast with read/write at the field-file level, which lives in OpenFOAM_IO.
 ! =============================================================================
 MODULE read_flow
@@ -34,50 +39,91 @@ CONTAINS
         INTEGER(ik), INTENT(out) :: data_count
         INTEGER(ik), INTENT(out) :: error_status
 
+        INTEGER(ik) :: count_p, count_rho, count_T, count_U, count_grid
+
         error_status = 0
+        data_count   = 0
 
         WRITE(*,*) 'Attempting to read data from:', TRIM(file_grid_in)
         WRITE(*,*) 'Attempting to read data from:', TRIM(file_var_in)
         WRITE(*,*) 'Flowfield format:', TRIM(flow_format)
 
-        IF (flow_format == 'OpenFOAM') THEN
-            ! Read Flowfield Variables
-            CALL read_OF_scalars(TRIM(file_var_in)//'p', N_HEADER_var, p_in, data_count, error_status)
+        IF (TRIM(flow_format) == 'OpenFOAM') THEN
+            ! Pressure
+            CALL read_OF_scalars(TRIM(file_var_in)//'p', N_HEADER_var, p_in, count_p, error_status)
             IF (error_status /= 0) THEN
                 error_status = ERR_FLOW_PRESSURE
                 CALL log_error(ERR_FLOW_PRESSURE, 'File: '//TRIM(file_var_in)//'p')
                 RETURN
             END IF
+            data_count = count_p
 
-            CALL read_OF_scalars(TRIM(file_var_in)//'rho', N_HEADER_var, rho_in, data_count, error_status)
+            ! Density
+            CALL read_OF_scalars(TRIM(file_var_in)//'rho', N_HEADER_var, rho_in, count_rho, error_status)
             IF (error_status /= 0) THEN
                 error_status = ERR_FLOW_DENSITY
                 CALL log_error(ERR_FLOW_DENSITY, 'File: '//TRIM(file_var_in)//'rho')
                 RETURN
             END IF
+            IF (count_rho /= data_count) THEN
+                error_status = ERR_FLOW_COUNT_MISMATCH
+                CALL log_error(ERR_FLOW_COUNT_MISMATCH, &
+                    'rho count '//TRIM(ADJUSTL(INT_TO_STR(count_rho)))// &
+                    ' differs from p count '//TRIM(ADJUSTL(INT_TO_STR(data_count))))
+                RETURN
+            END IF
 
-            CALL read_OF_scalars(TRIM(file_var_in)//'T', N_HEADER_var, T_in, data_count, error_status)
+            ! Temperature
+            CALL read_OF_scalars(TRIM(file_var_in)//'T', N_HEADER_var, T_in, count_T, error_status)
             IF (error_status /= 0) THEN
                 error_status = ERR_FLOW_TEMPERATURE
                 CALL log_error(ERR_FLOW_TEMPERATURE, 'File: '//TRIM(file_var_in)//'T')
                 RETURN
             END IF
+            IF (count_T /= data_count) THEN
+                error_status = ERR_FLOW_COUNT_MISMATCH
+                CALL log_error(ERR_FLOW_COUNT_MISMATCH, &
+                    'T count '//TRIM(ADJUSTL(INT_TO_STR(count_T)))// &
+                    ' differs from p count '//TRIM(ADJUSTL(INT_TO_STR(data_count))))
+                RETURN
+            END IF
 
-            CALL read_OF_vectors(TRIM(file_var_in)//'U', N_HEADER_grid, U_in, V_in, W_in, data_count, error_status)
+            ! Velocity (vector field; uses N_HEADER_var, not N_HEADER_grid)
+            CALL read_OF_vectors(TRIM(file_var_in)//'U', N_HEADER_var, U_in, V_in, W_in, count_U, error_status)
             IF (error_status /= 0) THEN
                 error_status = ERR_FLOW_VELOCITY
                 CALL log_error(ERR_FLOW_VELOCITY, 'File: '//TRIM(file_var_in)//'U')
                 RETURN
             END IF
+            IF (count_U /= data_count) THEN
+                error_status = ERR_FLOW_COUNT_MISMATCH
+                CALL log_error(ERR_FLOW_COUNT_MISMATCH, &
+                    'U count '//TRIM(ADJUSTL(INT_TO_STR(count_U)))// &
+                    ' differs from p count '//TRIM(ADJUSTL(INT_TO_STR(data_count))))
+                RETURN
+            END IF
 
-            ! Read Grid Coordinates (Cell Centers)
-            CALL read_OF_vectors(TRIM(file_grid_in), N_HEADER_grid, Xgrid, Ygrid, Zgrid, data_count, error_status)
+            ! Grid cell centers
+            CALL read_OF_vectors(TRIM(file_grid_in), N_HEADER_grid, Xgrid, Ygrid, Zgrid, count_grid, error_status)
             IF (error_status /= 0) THEN
                 error_status = ERR_FLOW_GRID
                 CALL log_error(ERR_FLOW_GRID, 'File: '//TRIM(file_grid_in))
                 RETURN
             END IF
+            IF (count_grid /= data_count) THEN
+                error_status = ERR_FLOW_COUNT_MISMATCH
+                CALL log_error(ERR_FLOW_COUNT_MISMATCH, &
+                    'grid count '//TRIM(ADJUSTL(INT_TO_STR(count_grid)))// &
+                    ' differs from p count '//TRIM(ADJUSTL(INT_TO_STR(data_count))))
+                RETURN
+            END IF
 
+        ELSE
+            ! Unsupported format: fail loudly rather than return an empty flowfield.
+            error_status = ERR_FLOW_UNKNOWN_FORMAT
+            CALL log_error(ERR_FLOW_UNKNOWN_FORMAT, &
+                'flow_format = '//TRIM(flow_format)//' (supported: OpenFOAM)')
+            RETURN
         END IF
 
         WRITE(*,*) 'SUCCESS: All data read successfully!'

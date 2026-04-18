@@ -1,2 +1,18 @@
+# Build artifacts
 mod/*.mod
 obj/*.o
+bin/TStep
+
+# Runtime outputs
+bin/disturbance.txt
+bin/eigenvalues.txt
+bin/fort.*
+output/*.dat
+output/*.csv
+
+# Editor / OS cruft
+.DS_Store
+**/.DS_Store
+*.bak
+*.swp
+*~

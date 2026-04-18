@@ -28,9 +28,20 @@ MODULE OpenFOAM_IO
     USE variables
     USE setup, ONLY: get_unit, INT_TO_STR
     USE error_handling
+    USE, INTRINSIC :: ISO_C_BINDING, ONLY: C_INT, C_CHAR, C_NULL_CHAR
 
     IMPLICIT NONE
 
+    ! Explicit interface to libc rename(3), used for atomic temp->final
+    ! file replacement without invoking a shell (avoids quoting issues and
+    ! shell-injection risk if paths ever contain special characters).
+    INTERFACE
+        FUNCTION c_rename(oldpath, newpath) BIND(C, NAME="rename") RESULT(r)
+            IMPORT :: C_INT, C_CHAR
+            CHARACTER(KIND=C_CHAR), DIMENSION(*), INTENT(IN) :: oldpath, newpath
+            INTEGER(C_INT) :: r
+        END FUNCTION c_rename
+    END INTERFACE
 
 CONTAINS
 
@@ -238,12 +249,24 @@ CONTAINS
                 RETURN
             END IF
 
-            ! Find the length of the non-blank characters to strip off trailing blanks.
+            ! Locate the enclosing parentheses robustly (tolerates leading
+            ! whitespace and trailing blanks/comments).
             buf_len = LEN_TRIM(line_buffer)
-
-            ! Use an internal read to parse the numbers.
-            ! The substring (2:buf_len-1) skips the opening '(' and closing ')'.
-            READ(line_buffer(2:buf_len-1), *, iostat=iostat_val) x_vector(i), y_vector(i), z_vector(i)
+            BLOCK
+                INTEGER(ik) :: p_open, p_close
+                p_open  = INDEX(line_buffer(1:buf_len), '(')
+                p_close = INDEX(line_buffer(1:buf_len), ')', BACK=.TRUE.)
+                IF (p_open <= 0 .OR. p_close <= p_open + 1) THEN
+                    ierr = ERR_VECTOR_FORMAT
+                    CALL log_error(ERR_VECTOR_FORMAT, &
+                        'File: '//TRIM(filename)//', missing parentheses at line: '// &
+                        TRIM(ADJUSTL(INT_TO_STR(i))))
+                    CLOSE(unit_num)
+                    RETURN
+                END IF
+                READ(line_buffer(p_open+1:p_close-1), *, iostat=iostat_val) &
+                    x_vector(i), y_vector(i), z_vector(i)
+            END BLOCK
             IF (iostat_val /= 0) THEN
                 ierr = ERR_VECTOR_FORMAT
                 CALL log_error(ERR_VECTOR_FORMAT, 'File: '//TRIM(filename)//', Line: '//&
@@ -404,14 +427,19 @@ CONTAINS
         CLOSE(unit_in)
         CLOSE(unit_out)
 
-        ! Replace original file with temporary file using system command
-        CALL EXECUTE_COMMAND_LINE('mv "'//TRIM(temp_filename)//'" "'//TRIM(filename)//'"', &
-                                   EXITSTAT=iostat_val, CMDSTAT=i)
-        IF (i /= 0 .OR. iostat_val /= 0) THEN
-            ierr = ERR_SCALAR_OPEN
-            CALL log_error(ERR_SCALAR_OPEN, 'Failed to rename temp file to: '//TRIM(filename))
-            RETURN
-        END IF
+        ! Replace original file with the temporary one via libc rename().
+        ! POSIX rename() is atomic when old and new are on the same filesystem,
+        ! which is always the case here (same directory, '.tmp' sibling).
+        BLOCK
+            INTEGER(C_INT) :: rc
+            rc = c_rename(TRIM(temp_filename)//C_NULL_CHAR, TRIM(filename)//C_NULL_CHAR)
+            IF (rc /= 0_C_INT) THEN
+                ierr = ERR_SCALAR_OPEN
+                CALL log_error(ERR_SCALAR_OPEN, &
+                    'rename() failed: '//TRIM(temp_filename)//' -> '//TRIM(filename))
+                RETURN
+            END IF
+        END BLOCK
 
     END SUBROUTINE write_OF_scalars
 
@@ -564,14 +592,17 @@ CONTAINS
         CLOSE(unit_in)
         CLOSE(unit_out)
 
-        ! Replace original file with temporary file using system command
-        CALL EXECUTE_COMMAND_LINE('mv "'//TRIM(temp_filename)//'" "'//TRIM(filename)//'"', &
-                                   EXITSTAT=iostat_val, CMDSTAT=i)
-        IF (i /= 0 .OR. iostat_val /= 0) THEN
-            ierr = ERR_VECTOR_OPEN
-            CALL log_error(ERR_VECTOR_OPEN, 'Failed to rename temp file to: '//TRIM(filename))
-            RETURN
-        END IF
+        ! Replace original file with the temporary one via libc rename().
+        BLOCK
+            INTEGER(C_INT) :: rc
+            rc = c_rename(TRIM(temp_filename)//C_NULL_CHAR, TRIM(filename)//C_NULL_CHAR)
+            IF (rc /= 0_C_INT) THEN
+                ierr = ERR_VECTOR_OPEN
+                CALL log_error(ERR_VECTOR_OPEN, &
+                    'rename() failed: '//TRIM(temp_filename)//' -> '//TRIM(filename))
+                RETURN
+            END IF
+        END BLOCK
 
     END SUBROUTINE write_OF_vectors
 

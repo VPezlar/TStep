@@ -66,6 +66,7 @@ MODULE error_handling
     INTEGER(ik), PARAMETER :: ERR_FLOW_VELOCITY = 404
     INTEGER(ik), PARAMETER :: ERR_FLOW_GRID = 405
     INTEGER(ik), PARAMETER :: ERR_FLOW_UNKNOWN_FORMAT = 406
+    INTEGER(ik), PARAMETER :: ERR_FLOW_COUNT_MISMATCH = 407
     
     ! --- Output Writing Module (500-599) ---
     INTEGER(ik), PARAMETER :: ERR_OUTPUT_FILE_OPEN = 501
@@ -110,6 +111,7 @@ MODULE error_handling
               ERR_VECTOR_READ, &
               ERR_FLOW_PRESSURE, ERR_FLOW_DENSITY, ERR_FLOW_TEMPERATURE, &
               ERR_FLOW_VELOCITY, ERR_FLOW_GRID, ERR_FLOW_UNKNOWN_FORMAT, &
+              ERR_FLOW_COUNT_MISMATCH, &
               ERR_OUTPUT_FILE_OPEN, ERR_OUTPUT_WRITE_HEADER, ERR_OUTPUT_WRITE_DATA, &
               ERR_CMD_LAUNCH_FAILED, ERR_CMD_NONZERO_EXIT, &
               ERR_DIST_INVALID_LENGTH, ERR_DIST_ALLOC, ERR_DIST_ZERO_NORM, &
@@ -231,6 +233,8 @@ CONTAINS
                 description = "Failed to read grid coordinates"
             CASE (ERR_FLOW_UNKNOWN_FORMAT)
                 description = "Unknown flow format specified"
+            CASE (ERR_FLOW_COUNT_MISMATCH)
+                description = "Mismatched data counts between flow fields"
                 
             ! Output writing errors
             CASE (ERR_OUTPUT_FILE_OPEN)

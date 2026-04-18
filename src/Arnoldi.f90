@@ -27,6 +27,38 @@ MODULE Arnoldi
 
     IMPLICIT NONE
 
+    ! -------------------------------------------------------------------------
+    ! Explicit interfaces for the LAPACK / BLAS routines we use.
+    ! Declaring them here (rather than relying on implicit interfaces at the
+    ! link step) lets the compiler catch argument-kind and rank mismatches at
+    ! compile time. We match the standard reference LAPACK signatures using
+    ! ik/rk (int32/real64), which is the native ABI of OpenBLAS/Netlib LAPACK
+    ! on a typical 32-bit-integer build. If an ILP64 build is ever linked, the
+    ! integer kind would need to change accordingly.
+    ! -------------------------------------------------------------------------
+    INTERFACE
+        SUBROUTINE DGEEV(JOBVL, JOBVR, N, A, LDA, WR, WI, &
+                         VL, LDVL, VR, LDVR, WORK, LWORK, INFO)
+            IMPORT :: ik, rk
+            CHARACTER(len=1), INTENT(IN)    :: JOBVL, JOBVR
+            INTEGER(ik),      INTENT(IN)    :: N, LDA, LDVL, LDVR, LWORK
+            INTEGER(ik),      INTENT(OUT)   :: INFO
+            REAL(rk),         INTENT(INOUT) :: A(LDA, *)
+            REAL(rk),         INTENT(OUT)   :: WR(*), WI(*)
+            REAL(rk),         INTENT(OUT)   :: VL(LDVL, *), VR(LDVR, *)
+            REAL(rk),         INTENT(OUT)   :: WORK(*)
+        END SUBROUTINE DGEEV
+
+        SUBROUTINE DGEMV(TRANS, M, N, ALPHA, A, LDA, X, INCX, BETA, Y, INCY)
+            IMPORT :: ik, rk
+            CHARACTER(len=1), INTENT(IN)    :: TRANS
+            INTEGER(ik),      INTENT(IN)    :: M, N, LDA, INCX, INCY
+            REAL(rk),         INTENT(IN)    :: ALPHA, BETA
+            REAL(rk),         INTENT(IN)    :: A(LDA, *), X(*)
+            REAL(rk),         INTENT(INOUT) :: Y(*)
+        END SUBROUTINE DGEMV
+    END INTERFACE
+
     PRIVATE
     PUBLIC :: arnoldi_eigenvalues
 
@@ -63,6 +95,7 @@ CONTAINS
 
         ! Local Variables
         INTEGER(ik) :: n
+        INTEGER(ik) :: m_eff   ! Effective Krylov size (may be < m on breakdown)
         REAL(rk), DIMENSION(:,:), ALLOCATABLE :: V, H, H_m
         REAL(rk), DIMENSION(:),   ALLOCATABLE :: w, w_temp
         REAL(rk) :: norm_w, h_correction
@@ -80,7 +113,8 @@ CONTAINS
 
         ! --- Initialization ---
         ERROR_STATUS = 0
-        n = SIZE(v_init)
+        n     = SIZE(v_init)
+        m_eff = m   ! May shrink below if Arnoldi breakdown occurs
 
         IF (n <= 0) THEN
             ERROR_STATUS = ERR_ARNOLDI_INVALID_DIM
@@ -163,6 +197,9 @@ CONTAINS
                                     '. Krylov subspace exhausted.'
                 V(:, j+1:m+1) = 0.0_rk
                 H(j+2:m+1, :) = 0.0_rk
+                ! Truncate: only the leading j x j Hessenberg is reliable,
+                ! so restrict DGEEV / sorting / output to m_eff = j.
+                m_eff = j
                 EXIT
             END IF
         END DO
@@ -171,7 +208,7 @@ CONTAINS
         H_m = H(1:m, 1:m)
 
         ! --- Step 4: Eigenvalues and eigenvectors of H_m (LAPACK DGEEV) ---
-        ALLOCATE(eigenvalues(m), STAT=ALLOC_STAT)
+        ALLOCATE(eigenvalues(m_eff), STAT=ALLOC_STAT)
         IF (ALLOC_STAT /= 0) THEN
             ERROR_STATUS = ERR_ARNOLDI_ALLOC
             CALL log_error(ERR_ARNOLDI_ALLOC, 'Failed to allocate eigenvalue array')
@@ -179,7 +216,7 @@ CONTAINS
             RETURN
         END IF
 
-        ALLOCATE(eigenvectors(n, m), STAT=ALLOC_STAT)
+        ALLOCATE(eigenvectors(n, m_eff), STAT=ALLOC_STAT)
         IF (ALLOC_STAT /= 0) THEN
             ERROR_STATUS = ERR_ARNOLDI_ALLOC
             CALL log_error(ERR_ARNOLDI_ALLOC, 'Failed to allocate eigenvector array')
@@ -194,7 +231,7 @@ CONTAINS
             INTEGER(ik) :: lwork_lapack, info_lapack
             REAL(rk)    :: work_query(1)
 
-            CALL DGEEV('N', 'V', m, H_m, m, eval_real, eval_imag, &
+            CALL DGEEV('N', 'V', m_eff, H_m, m, eval_real, eval_imag, &
                        evec_left, m, evec_right, m, work_query, -1, info_lapack)
 
             lwork_lapack = INT(work_query(1))
@@ -206,7 +243,7 @@ CONTAINS
                 RETURN
             END IF
 
-            CALL DGEEV('N', 'V', m, H_m, m, eval_real, eval_imag, &
+            CALL DGEEV('N', 'V', m_eff, H_m, m, eval_real, eval_imag, &
                        evec_left, m, evec_right, m, work_lapack, lwork_lapack, info_lapack)
 
             IF (info_lapack /= 0) THEN
@@ -217,23 +254,23 @@ CONTAINS
                 RETURN
             END IF
 
-            DO i = 1, m
+            DO i = 1, m_eff
                 eigenvalues(i) = CMPLX(eval_real(i), eval_imag(i), KIND=rk)
             END DO
 
             ! --- Step 5: Ritz vectors = V * (right eigenvectors of H_m) ---
             ! Handle real / complex-conjugate pairs as stored by DGEEV.
             i = 1
-            DO WHILE (i <= m)
+            DO WHILE (i <= m_eff)
                 IF (ABS(eval_imag(i)) < 1.0E-14_rk) THEN
-                    CALL DGEMV('N', n, m, 1.0_rk, V, n, evec_right(:, i), 1, 0.0_rk, w, 1)
+                    CALL DGEMV('N', n, m_eff, 1.0_rk, V, n, evec_right(:, i), 1, 0.0_rk, w, 1)
                     eigenvectors(:, i) = CMPLX(w, 0.0_rk, KIND=rk)
                     i = i + 1
                 ELSE IF (eval_imag(i) > 0.0_rk) THEN
-                    CALL DGEMV('N', n, m, 1.0_rk, V, n, evec_right(:, i),   1, 0.0_rk, w,      1)
-                    CALL DGEMV('N', n, m, 1.0_rk, V, n, evec_right(:, i+1), 1, 0.0_rk, w_temp, 1)
+                    CALL DGEMV('N', n, m_eff, 1.0_rk, V, n, evec_right(:, i),   1, 0.0_rk, w,      1)
+                    CALL DGEMV('N', n, m_eff, 1.0_rk, V, n, evec_right(:, i+1), 1, 0.0_rk, w_temp, 1)
                     eigenvectors(:, i) = CMPLX(w,  w_temp, KIND=rk)
-                    IF (i+1 <= m) eigenvectors(:, i+1) = CMPLX(w, -w_temp, KIND=rk)
+                    IF (i+1 <= m_eff) eigenvectors(:, i+1) = CMPLX(w, -w_temp, KIND=rk)
                     i = i + 2
                 ELSE
                     i = i + 1
@@ -244,7 +281,7 @@ CONTAINS
         END BLOCK
 
         ! --- Step 6: Sort eigenvalues (and their Ritz vectors) ---
-        ALLOCATE(sort_idx(m), imag_parts(m), temp_evec(n), STAT=ALLOC_STAT)
+        ALLOCATE(sort_idx(m_eff), imag_parts(m_eff), temp_evec(n), STAT=ALLOC_STAT)
         IF (ALLOC_STAT /= 0) THEN
             ERROR_STATUS = ERR_ARNOLDI_ALLOC
             CALL log_error(ERR_ARNOLDI_ALLOC, 'Failed to allocate sorting arrays')
@@ -256,34 +293,34 @@ CONTAINS
             SELECT CASE (TRIM(sort_by))
             CASE ('imaginary')
                 WRITE(*,'(A)') 'Sorting eigenvalues by: descending imaginary part'
-                DO i = 1, m
+                DO i = 1, m_eff
                     imag_parts(i) = AIMAG(eigenvalues(i))
                     sort_idx(i)   = i
                 END DO
             CASE ('real')
                 WRITE(*,'(A)') 'Sorting eigenvalues by: descending real part'
-                DO i = 1, m
+                DO i = 1, m_eff
                     imag_parts(i) = REAL(eigenvalues(i))
                     sort_idx(i)   = i
                 END DO
             CASE DEFAULT
                 WRITE(*,'(A)') 'Sorting eigenvalues by: descending magnitude'
-                DO i = 1, m
+                DO i = 1, m_eff
                     imag_parts(i) = ABS(eigenvalues(i))
                     sort_idx(i)   = i
                 END DO
             END SELECT
         ELSE
             WRITE(*,'(A)') 'Sorting eigenvalues by: descending magnitude (default)'
-            DO i = 1, m
+            DO i = 1, m_eff
                 imag_parts(i) = ABS(eigenvalues(i))
                 sort_idx(i)   = i
             END DO
         END IF
 
         ! Simple bubble sort (descending)
-        DO i = 1, m-1
-            DO j = i+1, m
+        DO i = 1, m_eff-1
+            DO j = i+1, m_eff
                 IF (imag_parts(sort_idx(j)) > imag_parts(sort_idx(i))) THEN
                     k           = sort_idx(i)
                     sort_idx(i) = sort_idx(j)
@@ -292,13 +329,13 @@ CONTAINS
             END DO
         END DO
 
-        DO i = 1, m
+        DO i = 1, m_eff
             eval_work(i)    = eigenvalues(sort_idx(i))
             evec_work(:, i) = eigenvectors(:, sort_idx(i))
         END DO
 
-        eigenvalues  = eval_work
-        eigenvectors = evec_work
+        eigenvalues(1:m_eff)     = eval_work(1:m_eff)
+        eigenvectors(:, 1:m_eff) = evec_work(:, 1:m_eff)
 
         DEALLOCATE(V, H, H_m, w, w_temp, eval_work, evec_work, RWORK, &
                    sort_idx, imag_parts, temp_evec)
