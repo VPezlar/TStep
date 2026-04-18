@@ -1,3 +1,16 @@
+! =============================================================================
+! write_flow  --  writes flow fields BACK into the CFD solver's native format
+!                 (currently OpenFOAM) so the solver can continue from them.
+!
+! Produces one file per field (p, rho, T, U) inside `file_var_out`, which is
+! an OpenFOAM time directory. No grid is written -- the mesh lives separately
+! in the case's constant/polyMesh. Use this to hand perturbed or advanced
+! flowfields back to rhoCentralFoam (or another solver) for the next step.
+!
+! Contrast with write_output, which produces a single human-readable CSV for
+! post-processing and analysis rather than for the solver.
+! =============================================================================
+
 MODULE write_flow
     USE accuracy
     USE variables

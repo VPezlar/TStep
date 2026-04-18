@@ -1,3 +1,21 @@
+! =============================================================================
+! error_handling  --  centralized error codes + uniform logging.
+!
+! Every numbered error in TStep is defined here as an INTEGER(ik) PARAMETER,
+! grouped by originating module in blocks of 100:
+!   000-099 Main          400-499 Flow reading
+!   100-199 Setup         500-599 Output writing
+!   200-299 OpenFOAM scalar I/O   600-699 External commands
+!   300-399 OpenFOAM vector I/O   700-799 Random disturbance
+!                                 800-899 Arnoldi
+!                                 900-999 Eigendata writing
+!
+! `log_error(code [, info])` prints a banner with the code, module name, and
+! human-readable description to stdout; `get_module_name` and
+! `get_error_description` provide the text. Adding a new error means: add the
+! PARAMETER, export it from the PRIVATE/PUBLIC list below, and add a CASE in
+! `get_error_description`.
+! =============================================================================
 MODULE error_handling
     USE accuracy
     

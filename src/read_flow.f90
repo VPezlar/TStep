@@ -1,3 +1,17 @@
+! =============================================================================
+! read_flow  --  high-level orchestration for loading a base flowfield into
+!                allocatable arrays in memory.
+!
+! `read_flowfield(rho,p,T,U,V,W, X,Y,Z, n, ierr)` dispatches on flow_format
+! (currently only 'OpenFOAM') and pulls five quantities from disk using the
+! low-level readers in OpenFOAM_IO:
+!   - scalars p, rho, T from file_var_in/{p,rho,T}
+!   - vector  U (split into U,V,W) from file_var_in/U
+!   - grid cell centers X,Y,Z from file_grid_in
+! Every failure maps to a specific ERR_FLOW_* code for clean reporting.
+!
+! Contrast with read/write at the field-file level, which lives in OpenFOAM_IO.
+! =============================================================================
 MODULE read_flow
     USE accuracy
     USE variables

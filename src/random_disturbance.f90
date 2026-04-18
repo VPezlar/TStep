@@ -1,3 +1,16 @@
+! =============================================================================
+! random_disturbance  --  generates a random, unit-norm perturbation vector
+!                         scaled by a user-supplied magnitude.
+!
+! `initial_disturbance(N, mag, v, ierr)` returns an allocatable REAL vector v
+! of length N with values drawn uniformly in [-1, 1), then L2-normalized and
+! multiplied by `mag` (so ||v||_2 == mag). Used to seed the initial Krylov
+! vector for Arnoldi and to produce small flowfield perturbations for the
+! Frechet-derivative matvec.
+!
+! Relies on the intrinsic RANDOM_NUMBER generator (no explicit seeding yet
+! so each run is reproducible with the compiler's default seed state).
+! =============================================================================
 MODULE random_disturbance
     USE accuracy
     USE variables

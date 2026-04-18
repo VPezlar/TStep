@@ -1,3 +1,16 @@
+! =============================================================================
+! write_output  --  writes a single human-readable CSV of the flowfield for
+!                   post-processing, plotting, and debugging.
+!
+! Produces one flat file at `output_file` (e.g. ../output/flowfield.csv) with
+! 9 columns: X,Y,Z,rho,p,T,U,V,W (one row per cell, scientific notation).
+! Grid coordinates are included because a CSV has no implicit mesh. Format is
+! solver-agnostic -- anything readable by pandas/MATLAB/ParaView etc.
+!
+! Contrast with write_flow, which writes back into the CFD solver's native
+! format (OpenFOAM time directory) so the solver can continue stepping.
+! =============================================================================
+
 MODULE write_output
     USE accuracy
     USE variables

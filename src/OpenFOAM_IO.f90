@@ -1,3 +1,28 @@
+! =============================================================================
+! OpenFOAM_IO  --  low-level readers and writers for OpenFOAM field files.
+!
+! The format we support is the standard OpenFOAM layout:
+!   <header_lines>
+!   N
+!   (
+!   value1         (for scalar fields)        (val1x val1y val1z)   (vectors)
+!   value2                                    (val2x val2y val2z)
+!   ...                                       ...
+!   valueN                                    (valNx valNy valNz)
+!   )
+!   <footer>
+!
+! Four routines:
+!   read_OF_scalars(filename, n_header, vec_out, N, ierr)
+!   read_OF_vectors(filename, n_header, x,y,z, N, ierr)
+!   write_OF_scalars(filename, n_header, vec_in, N, ierr)  -- preserves header/footer
+!   write_OF_vectors(filename, n_header, x,y,z, N, ierr)   -- preserves header/footer
+!
+! Writers work in-place by copying through a `.tmp` sibling and `mv`-ing it
+! over the original, so the untouched header and closing parenthesis / footer
+! survive round-trips and OpenFOAM is happy to reuse the file.
+! Higher-level orchestration lives in read_flow and write_flow.
+! =============================================================================
 MODULE OpenFOAM_IO
     USE accuracy
     USE variables
@@ -5,8 +30,6 @@ MODULE OpenFOAM_IO
     USE error_handling
 
     IMPLICIT NONE
-    ! Purpose: Provides subroutines to read custom datasets (Header, Count N, N lines of data).
-    ! Error codes are now imported from error_handling module
 
 
 CONTAINS

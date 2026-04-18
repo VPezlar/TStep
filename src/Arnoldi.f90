@@ -1,3 +1,25 @@
+! =============================================================================
+! Arnoldi  --  Arnoldi iteration for the dominant Ritz eigenpairs of the
+!              linearized flow operator A.
+!
+! Public:  arnoldi_eigenvalues(v_init, m, frechet_order, eps_0, TTime,
+!                              eigenvalues, eigenvectors, ierr,
+!                              skip_normalization, sort_by)
+!   Builds a size-m Krylov basis V and Hessenberg H via modified Gram-Schmidt
+!   with one reorthogonalization pass, computes eigenvalues/eigenvectors of
+!   H_m with LAPACK DGEEV, lifts them to full-space Ritz vectors (V * y),
+!   and sorts by 'magnitude' / 'real' / 'imaginary'.
+!
+! Private stub: apply_linearized_operator(v_in, w_out, ...)
+!   Intended to return w = A*v where A is the Jacobian of the nonlinear CFD
+!   solver F about the base state, approximated by the Frechet derivative
+!     w ~ (F(q0 + eps_0 * v) - F(q0)) / eps_0
+!   using run_simulation from call_CFD to advance the flow by TTime.
+!
+!   TODO: This is CURRENTLY A STUB that returns ERR_ARNOLDI_NOT_IMPLEMENTED,
+!         so arnoldi_eigenvalues aborts on iteration 1 until you implement it.
+!         See the detailed outline in the comment block above the stub.
+! =============================================================================
 MODULE Arnoldi
     USE accuracy
     USE error_handling

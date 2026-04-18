@@ -1,3 +1,17 @@
+! =============================================================================
+! setup  --  reads inputs/inputs.in and provides small utility helpers.
+!
+! `configurationRead` parses three Fortran namelists into the globals in
+! `variables`:
+!   &General  -- solver-agnostic settings (flow_format, output_file, ...)
+!   &Arnoldi  -- eigenvalue-solver parameters
+!   &<solver> -- format-specific block, chosen via flow_format (e.g. OpenFOAM)
+! Additional solvers plug in by adding another ELSE IF arm and namelist.
+!
+! Also exposes two helpers used across the codebase:
+!   get_unit(u)      -- return an unused Fortran unit number in [10, 99]
+!   INT_TO_STR(val)  -- cheap integer-to-string for error messages
+! =============================================================================
 MODULE setup
     USE accuracy
     USE variables

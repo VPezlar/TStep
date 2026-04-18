@@ -1,3 +1,16 @@
+! =============================================================================
+! write_eigendata  --  writes Arnoldi Ritz eigenvalues and Ritz eigenvectors
+!                      to plain-text .dat files for external analysis.
+!
+! Produces two files in ../output/:
+!   eigenvalues.dat   --  one row per eigenvalue: index, Re, Im, |lambda|
+!   eigenvectors.dat  --  for each eigenvector, n lines: component, Re, Im
+! Both files are commented with a header recording m, n, and the sort order
+! (`eigenvalue_sort_by` from inputs.in).
+!
+! Intended for post-processing with numpy/MATLAB etc. The module is only
+! wired back into main once the Frechet matvec stub in Arnoldi.f90 is real.
+! =============================================================================
 MODULE write_eigendata
     USE accuracy
     USE variables

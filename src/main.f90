@@ -1,3 +1,28 @@
+! =============================================================================
+! main  --  program entry point and top-level pipeline.
+!
+! Pipeline (one pass per invocation):
+!   1. configurationRead          -- parse inputs/inputs.in
+!   2. run_simulation             -- advance the external CFD solver once
+!                                    (per COMMAND_RUN in inputs.in)
+!   3. read_flowfield             -- load base state (rho,p,T,U,V,W,X,Y,Z)
+!   4. initial_disturbance        -- generate a random unit-norm pert_0 * mag
+!   5. [TEMP] write pert_0 to     -- debug dump (to be removed after validation)
+!            disturbance.txt
+!   6. write_flowfield            -- push (base + pert_0) back into the
+!                                    OpenFOAM time directory for a next step
+!   7. write_flowfield_data       -- dump the base state to a human CSV
+!   8. cleanup_allocations        -- deallocate everything and exit
+!
+! The Arnoldi eigenvalue call is intentionally NOT invoked here -- it
+! depends on the Frechet-derivative matvec in Arnoldi.f90, which is still a
+! TODO stub. Re-add the call below step 7 once that stub is implemented.
+!
+! Internal helpers (CONTAINS):
+!   set_blas_threads(n)      -- sets OMP/OPENBLAS/MKL_NUM_THREADS via setenv
+!                                (unused today; ready for the real Arnoldi run)
+!   cleanup_allocations()    -- guarded DEALLOCATE for every allocatable above
+! =============================================================================
 PROGRAM main
     USE accuracy
     USE setup
