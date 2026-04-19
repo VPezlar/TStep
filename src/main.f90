@@ -7,16 +7,21 @@
 !                                    (per COMMAND_RUN in inputs.in)
 !   3. read_flowfield             -- load base state (rho,p,T,U,V,W,X,Y,Z)
 !   4. initial_disturbance        -- generate a random unit-norm pert_0 * mag
+!                                    *** NOW of full state-vector length
+!                                    (NVARS*Nmesh), not Nmesh. ***
 !   5. [TEMP] write pert_0 to     -- debug dump (to be removed after validation)
 !            disturbance.txt
-!   6. write_flowfield            -- push (base + pert_0) back into the
-!                                    OpenFOAM time directory for a next step
-!   7. write_flowfield_data       -- dump the base state to a human CSV
-!   8. cleanup_allocations        -- deallocate everything and exit
+!   6. unpack_state(pert_0)       -- split pert_0 into six per-field perturbations
+!                                    drho, dp, dT, dU, dV, dW.
+!   7. write_flowfield            -- push (base + per-field disturbance) back
+!                                    into the OpenFOAM time directory for the
+!                                    next step.
+!   8. write_flowfield_data       -- dump the base state to a human CSV
+!   9. cleanup_allocations        -- deallocate everything and exit
 !
 ! The Arnoldi eigenvalue call is intentionally NOT invoked here -- it
 ! depends on the Frechet-derivative matvec in Arnoldi.f90, which is still a
-! TODO stub. Re-add the call below step 7 once that stub is implemented.
+! TODO stub. Re-add the call below step 8 once that stub is implemented.
 !
 ! Internal helpers (CONTAINS):
 !   set_blas_threads(n)      -- sets OMP/OPENBLAS/MKL_NUM_THREADS via setenv
@@ -34,6 +39,7 @@ PROGRAM main
     USE error_handling
     USE variables
     USE frechet_stencil
+    USE state_vector
     USE, INTRINSIC :: ISO_C_BINDING
 
     IMPLICIT NONE
@@ -48,9 +54,16 @@ PROGRAM main
         END FUNCTION c_setenv
     END INTERFACE
 
+    ! --- Base flow (per-field arrays of length Nmesh) ---
     REAL(rk), DIMENSION(:), ALLOCATABLE :: rho_in, p_in, T_in, U_in, V_in, W_in
-    REAL(rk), DIMENSION(:), ALLOCATABLE :: Xgrid, Ygrid, Zgrid, pert_0
-    INTEGER(ik) :: data_count
+    REAL(rk), DIMENSION(:), ALLOCATABLE :: Xgrid, Ygrid, Zgrid
+
+    ! --- Disturbance: flat state vector (length NVARS*Nmesh), plus
+    !     per-field slices produced by unpack_state for use with write_flowfield.
+    REAL(rk), DIMENSION(:), ALLOCATABLE :: pert_0
+    REAL(rk), DIMENSION(:), ALLOCATABLE :: drho, dp, dT, dU, dV, dW
+
+    INTEGER(ik) :: data_count, pert_length
     INTEGER(ik) :: error_status, STATUS_CODE
     INTEGER(ik) :: unit_num, i
 
@@ -117,8 +130,13 @@ PROGRAM main
         STOP ERR_MAIN_READ_FLOW
     END IF
 
-    ! --- Generate initial disturbance ---
-    CALL initial_disturbance(data_count, dist_mag, pert_0, error_status)
+    ! --- Generate initial disturbance at FULL STATE-VECTOR LENGTH ---
+    !
+    ! pert_0 is a flat vector of length NVARS*Nmesh (6 * data_count).
+    ! It represents a distinct random perturbation for every (variable, cell)
+    ! slot, not a single Nmesh vector broadcast across all six fields.
+    pert_length = state_length(data_count)
+    CALL initial_disturbance(pert_length, dist_mag, pert_0, error_status)
     IF (error_status /= 0) THEN
         CALL log_error(ERR_MAIN_DISTURBANCE)
         CALL cleanup_allocations()
@@ -136,7 +154,7 @@ PROGRAM main
         ! Write vector size first (helpful for later reading)
         WRITE(unit_num, *) SIZE(pert_0)
         ! Write all elements of the vector, one per line
-        DO i = 1, data_count
+        DO i = 1, pert_length
             WRITE(unit_num, *) pert_0(i)
         END DO
         CLOSE(unit_num)
@@ -144,13 +162,32 @@ PROGRAM main
     END IF
     ! --- End TEMPORARY section ---
 
-    ! --- Write perturbed flowfield (base + disturbance) ---
-    CALL write_flowfield(rho_in + pert_0, &
-                         p_in   + pert_0, &
-                         T_in   + pert_0, &
-                         U_in   + pert_0, &
-                         V_in   + pert_0, &
-                         W_in   + pert_0, &
+    ! --- Split the full-length pert_0 into six per-field perturbations ---
+    ALLOCATE(drho(data_count), dp(data_count), dT(data_count), &
+             dU  (data_count), dV(data_count), dW(data_count), STAT=error_status)
+    IF (error_status /= 0) THEN
+        CALL log_error(ERR_MAIN_DISTURBANCE, 'Per-field disturbance allocation failed')
+        CALL cleanup_allocations()
+        STOP ERR_MAIN_DISTURBANCE
+    END IF
+
+    CALL unpack_state(pert_0, drho, dp, dT, dU, dV, dW, error_status)
+    IF (error_status /= 0) THEN
+        CALL log_error(ERR_MAIN_DISTURBANCE, 'unpack_state on pert_0 failed')
+        CALL cleanup_allocations()
+        STOP ERR_MAIN_DISTURBANCE
+    END IF
+
+    ! --- Write perturbed flowfield (base + per-field disturbance) ---
+    !
+    ! Each variable now receives its OWN random perturbation slice, not a
+    ! single vector broadcast across every field as in the pre-Step-B code.
+    CALL write_flowfield(rho_in + drho, &
+                         p_in   + dp,   &
+                         T_in   + dT,   &
+                         U_in   + dU,   &
+                         V_in   + dV,   &
+                         W_in   + dW,   &
                          data_count, error_status)
 
     IF (error_status /= 0) THEN
@@ -225,6 +262,14 @@ CONTAINS
         IF (ALLOCATED(Ygrid))  DEALLOCATE(Ygrid)
         IF (ALLOCATED(Zgrid))  DEALLOCATE(Zgrid)
         IF (ALLOCATED(pert_0)) DEALLOCATE(pert_0)
+
+        ! Per-field disturbance slices (added in Step B)
+        IF (ALLOCATED(drho)) DEALLOCATE(drho)
+        IF (ALLOCATED(dp))   DEALLOCATE(dp)
+        IF (ALLOCATED(dT))   DEALLOCATE(dT)
+        IF (ALLOCATED(dU))   DEALLOCATE(dU)
+        IF (ALLOCATED(dV))   DEALLOCATE(dV)
+        IF (ALLOCATED(dW))   DEALLOCATE(dW)
     END SUBROUTINE cleanup_allocations
 
 END PROGRAM main
