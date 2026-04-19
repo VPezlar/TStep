@@ -33,6 +33,7 @@ OBJECTS = accuracy.o \
 	  error_handling.o \
 	  variables.o \
 	  setup.o \
+	  frechet_stencil.o \
 	  Arnoldi.o \
 	  write_eigendata.o \
 	  OpenFOAM_IO.o \

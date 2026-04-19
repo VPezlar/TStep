@@ -84,7 +84,7 @@ CONTAINS
         ! Arguments
         REAL(rk), DIMENSION(:),              INTENT(IN)  :: v_init
         INTEGER(ik),                         INTENT(IN)  :: m
-        CHARACTER(len=*),                    INTENT(IN)  :: frechet_order
+        INTEGER(ik),                         INTENT(IN)  :: frechet_order
         REAL(rk),                            INTENT(IN)  :: eps_0
         REAL(rk),                            INTENT(IN)  :: TTime
         COMPLEX(rk), DIMENSION(:),   ALLOCATABLE, INTENT(OUT) :: eigenvalues
@@ -368,7 +368,7 @@ CONTAINS
     SUBROUTINE apply_linearized_operator(v_in, w_out, frechet_order, eps_0, TTime, ierr)
         REAL(rk), DIMENSION(:), INTENT(IN)  :: v_in
         REAL(rk), DIMENSION(:), INTENT(OUT) :: w_out
-        CHARACTER(len=*),       INTENT(IN)  :: frechet_order
+        INTEGER(ik),            INTENT(IN)  :: frechet_order
         REAL(rk),               INTENT(IN)  :: eps_0
         REAL(rk),               INTENT(IN)  :: TTime
         INTEGER(ik),            INTENT(OUT) :: ierr
@@ -386,7 +386,7 @@ CONTAINS
 
         ! Silence unused-argument warnings (no runtime effect).
         IF (.FALSE.) THEN
-            w_out(1) = v_in(1) + eps_0 + TTime + REAL(LEN_TRIM(frechet_order), rk)
+            w_out(1) = v_in(1) + eps_0 + TTime + REAL(frechet_order, KIND=rk)
         END IF
     END SUBROUTINE apply_linearized_operator
 

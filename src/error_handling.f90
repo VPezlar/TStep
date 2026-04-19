@@ -95,6 +95,11 @@ MODULE error_handling
     INTEGER(ik), PARAMETER :: ERR_EIGENDATA_OPEN_EVEC = 902
     INTEGER(ik), PARAMETER :: ERR_EIGENDATA_WRITE_EVAL = 903
     INTEGER(ik), PARAMETER :: ERR_EIGENDATA_WRITE_EVEC = 904
+
+    ! --- Frechet Stencil Module (1000-1099) ---
+    INTEGER(ik), PARAMETER :: ERR_FRECHET_INVALID_ORDER = 1001
+    INTEGER(ik), PARAMETER :: ERR_FRECHET_ALLOC         = 1002
+    INTEGER(ik), PARAMETER :: ERR_FRECHET_SOLVE         = 1003
     
     ! ============================================================
     ! ERROR MESSAGE LOOKUP
@@ -119,6 +124,7 @@ MODULE error_handling
               ERR_ARNOLDI_ALLOC, ERR_ARNOLDI_LAPACK, ERR_ARNOLDI_NOT_IMPLEMENTED, &
               ERR_EIGENDATA_OPEN_EVAL, ERR_EIGENDATA_OPEN_EVEC, &
               ERR_EIGENDATA_WRITE_EVAL, ERR_EIGENDATA_WRITE_EVEC, &
+              ERR_FRECHET_INVALID_ORDER, ERR_FRECHET_ALLOC, ERR_FRECHET_SOLVE, &
               log_error, get_module_name, get_error_description
     
 CONTAINS
@@ -152,6 +158,8 @@ CONTAINS
                 module_name = "ARNOLDI"
             CASE (9)
                 module_name = "EIGENDATA_WRITING"
+            CASE (10)
+                module_name = "FRECHET_STENCIL"
             CASE DEFAULT
                 module_name = "UNKNOWN_MODULE"
         END SELECT
@@ -281,6 +289,14 @@ CONTAINS
                 description = "Error writing eigenvalues data"
             CASE (ERR_EIGENDATA_WRITE_EVEC)
                 description = "Error writing eigenvectors data"
+
+            ! Frechet stencil errors
+            CASE (ERR_FRECHET_INVALID_ORDER)
+                description = "Invalid Frechet order (must be 1 or a positive even integer)"
+            CASE (ERR_FRECHET_ALLOC)
+                description = "Memory allocation failed in Frechet stencil"
+            CASE (ERR_FRECHET_SOLVE)
+                description = "LAPACK DGESV failed for Vandermonde system"
                 
             CASE DEFAULT
                 description = "Unknown error code"

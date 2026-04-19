@@ -24,7 +24,7 @@ MODULE variables
     
     ! Arnoldi parameters
     INTEGER(ik) :: krylov_size
-    CHARACTER(len=20) :: frechet_order
+    INTEGER(ik) :: frechet_order
     CHARACTER(len=20) :: eigenvalue_sort_by
     REAL(rk) :: eps_0, TTime
     

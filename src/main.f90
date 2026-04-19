@@ -33,6 +33,7 @@ PROGRAM main
     USE random_disturbance
     USE error_handling
     USE variables
+    USE frechet_stencil
     USE, INTRINSIC :: ISO_C_BINDING
 
     IMPLICIT NONE
@@ -59,6 +60,43 @@ PROGRAM main
         CALL log_error(ERR_MAIN_CONFIG)
         STOP ERR_MAIN_CONFIG
     END IF
+
+    ! --- TEST: Compute Frechet stencil nodes and weights ---
+    ! Exercises orders 1, 2, 4, 6 (matching the Python reference stencil).
+    ! Writes frechet_stencil.txt to the run directory for inspection.
+    ! TODO: remove once Frechet_weights is wired into apply_linearized_operator.
+    BLOCK
+        INTEGER(ik), DIMENSION(4) :: test_orders
+        REAL(rk), DIMENSION(:), ALLOCATABLE :: fw_nodes, fw_weights
+        INTEGER(ik) :: fw_err, fw_unit, io_err, iord, k
+
+        test_orders = [1, 2, 4, 6]
+        CALL get_unit(fw_unit)
+        OPEN(UNIT=fw_unit, FILE='frechet_stencil.txt', STATUS='REPLACE', &
+             ACTION='WRITE', IOSTAT=io_err)
+        IF (io_err /= 0) THEN
+            WRITE(*,*) 'WARNING: Cannot open frechet_stencil.txt'
+        ELSE
+            WRITE(fw_unit, '(A)') '# Frechet stencil: nodes and weights'
+            WRITE(fw_unit, '(A)') '# Format: node_alpha  weight'
+            DO iord = 1, SIZE(test_orders)
+                CALL Frechet_weights(test_orders(iord), fw_nodes, fw_weights, fw_err)
+                IF (fw_err /= 0) THEN
+                    WRITE(fw_unit, '(A,I0,A)') '# Order ', test_orders(iord), ': FAILED'
+                    CYCLE
+                END IF
+                WRITE(fw_unit, '(A,I0,A,I0,A)') &
+                    '# Order ', test_orders(iord), '  N=', SIZE(fw_nodes), ' points'
+                DO k = 1, SIZE(fw_nodes)
+                    WRITE(fw_unit, '(2ES25.15)') fw_nodes(k), fw_weights(k)
+                END DO
+                DEALLOCATE(fw_nodes, fw_weights)
+            END DO
+            CLOSE(fw_unit)
+            WRITE(*,*) 'SUCCESS: Frechet stencil written to frechet_stencil.txt'
+        END IF
+    END BLOCK
+    ! --- End Frechet stencil test ---
 
     ! --- Execute external command (run CFD solver once to generate base state) ---
     CALL run_simulation(COMMAND_RUN, STATUS_CODE)
