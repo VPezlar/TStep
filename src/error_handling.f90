@@ -100,6 +100,11 @@ MODULE error_handling
     INTEGER(ik), PARAMETER :: ERR_FRECHET_INVALID_ORDER = 1001
     INTEGER(ik), PARAMETER :: ERR_FRECHET_ALLOC         = 1002
     INTEGER(ik), PARAMETER :: ERR_FRECHET_SOLVE         = 1003
+
+    ! --- State Vector Module (1100-1199) ---
+    INTEGER(ik), PARAMETER :: ERR_STATE_SHAPE_MISMATCH = 1101
+    INTEGER(ik), PARAMETER :: ERR_STATE_VECTOR_SIZE    = 1102
+
     
     ! ============================================================
     ! ERROR MESSAGE LOOKUP
@@ -123,8 +128,8 @@ MODULE error_handling
               ERR_ARNOLDI_ZERO_V1, ERR_ARNOLDI_INVALID_DIM, ERR_ARNOLDI_INVALID_KRYLOV, &
               ERR_ARNOLDI_ALLOC, ERR_ARNOLDI_LAPACK, ERR_ARNOLDI_NOT_IMPLEMENTED, &
               ERR_EIGENDATA_OPEN_EVAL, ERR_EIGENDATA_OPEN_EVEC, &
-              ERR_EIGENDATA_WRITE_EVAL, ERR_EIGENDATA_WRITE_EVEC, &
               ERR_FRECHET_INVALID_ORDER, ERR_FRECHET_ALLOC, ERR_FRECHET_SOLVE, &
+              ERR_STATE_SHAPE_MISMATCH, ERR_STATE_VECTOR_SIZE, &
               log_error, get_module_name, get_error_description
     
 CONTAINS
@@ -160,6 +165,8 @@ CONTAINS
                 module_name = "EIGENDATA_WRITING"
             CASE (10)
                 module_name = "FRECHET_STENCIL"
+            CASE (11)
+                module_name = "STATE_VECTOR"
             CASE DEFAULT
                 module_name = "UNKNOWN_MODULE"
         END SELECT
@@ -297,6 +304,11 @@ CONTAINS
                 description = "Memory allocation failed in Frechet stencil"
             CASE (ERR_FRECHET_SOLVE)
                 description = "LAPACK DGESV failed for Vandermonde system"
+            ! State vector errors
+            CASE (ERR_STATE_SHAPE_MISMATCH)
+                description = "State vector: field arrays have mismatched lengths"
+            CASE (ERR_STATE_VECTOR_SIZE)
+                description = "State vector: total length does not equal NVARS*Nmesh"
                 
             CASE DEFAULT
                 description = "Unknown error code"
