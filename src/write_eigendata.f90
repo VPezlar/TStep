@@ -2,7 +2,7 @@
 ! write_eigendata  --  writes Arnoldi Ritz eigenvalues and Ritz eigenvectors
 !                      to plain-text .dat files for external analysis.
 !
-! Produces two files in ../output/:
+! Produces two files in <stability_dir>/:
 !   eigenvalues.dat   --  one row per eigenvalue: index, Re, Im, |lambda|
 !   eigenvectors.dat  --  for each eigenvector, n lines: component, Re, Im
 ! Both files are commented with a header recording m, n, and the sort order
@@ -15,7 +15,7 @@ MODULE write_eigendata
     USE accuracy
     USE variables
     USE error_handling
-    USE setup, ONLY: get_unit
+    USE setup, ONLY: get_unit, stability_output_path
     
     IMPLICIT NONE
     
@@ -47,12 +47,13 @@ CONTAINS
         
         ! --- Write eigenvalues.dat ---
         CALL get_unit(unit_eval)
-        OPEN(UNIT=unit_eval, FILE='../output/eigenvalues.dat', STATUS='REPLACE', &
-             ACTION='WRITE', IOSTAT=io_stat)
-        
+        OPEN(UNIT=unit_eval, FILE=TRIM(stability_output_path('eigenvalues.dat')), &
+             STATUS='REPLACE', ACTION='WRITE', IOSTAT=io_stat)
+
         IF (io_stat /= 0) THEN
             error_status = ERR_EIGENDATA_OPEN_EVAL
-            CALL log_error(ERR_EIGENDATA_OPEN_EVAL, 'Check that ../output/ directory exists')
+            CALL log_error(ERR_EIGENDATA_OPEN_EVAL, &
+                'File: '//TRIM(stability_output_path('eigenvalues.dat')))
             RETURN
         END IF
         
@@ -72,16 +73,17 @@ CONTAINS
         END DO
         
         CLOSE(unit_eval)
-        WRITE(*,*) 'SUCCESS: Wrote eigenvalues to ../output/eigenvalues.dat'
+        WRITE(*,*) 'SUCCESS: Wrote eigenvalues to ', TRIM(stability_output_path('eigenvalues.dat'))
         
         ! --- Write eigenvectors.dat ---
         CALL get_unit(unit_evec)
-        OPEN(UNIT=unit_evec, FILE='../output/eigenvectors.dat', STATUS='REPLACE', &
-             ACTION='WRITE', IOSTAT=io_stat)
-        
+        OPEN(UNIT=unit_evec, FILE=TRIM(stability_output_path('eigenvectors.dat')), &
+             STATUS='REPLACE', ACTION='WRITE', IOSTAT=io_stat)
+
         IF (io_stat /= 0) THEN
             error_status = ERR_EIGENDATA_OPEN_EVEC
-            CALL log_error(ERR_EIGENDATA_OPEN_EVEC, 'Check that ../output/ directory exists')
+            CALL log_error(ERR_EIGENDATA_OPEN_EVEC, &
+                'File: '//TRIM(stability_output_path('eigenvectors.dat')))
             RETURN
         END IF
         
@@ -106,7 +108,7 @@ CONTAINS
         END DO
         
         CLOSE(unit_evec)
-        WRITE(*,*) 'SUCCESS: Wrote eigenvectors to ../output/eigenvectors.dat'
+        WRITE(*,*) 'SUCCESS: Wrote eigenvectors to ', TRIM(stability_output_path('eigenvectors.dat'))
         WRITE(*,*)
         
     END SUBROUTINE write_eigen_files

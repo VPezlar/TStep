@@ -1,8 +1,10 @@
 ! =============================================================================
 ! Arnoldi  --  Arnoldi iteration for the dominant Ritz eigenpairs of the
-!              linearized flow operator A.
+!              linearized flow operator A about the base state q0.
 !
 ! Public:  arnoldi_eigenvalues(v_init, m, frechet_order, eps_0, TTime,
+!                              rho0, p0, T0, U0, V0, W0,
+!                              F_q0_vec, has_F_q0,
 !                              eigenvalues, eigenvectors, ierr,
 !                              skip_normalization, sort_by)
 !   Builds a size-m Krylov basis V and Hessenberg H via modified Gram-Schmidt
@@ -10,20 +12,26 @@
 !   H_m with LAPACK DGEEV, lifts them to full-space Ritz vectors (V * y),
 !   and sorts by 'magnitude' / 'real' / 'imaginary'.
 !
-! Private stub: apply_linearized_operator(v_in, w_out, ...)
-!   Intended to return w = A*v where A is the Jacobian of the nonlinear CFD
-!   solver F about the base state, approximated by the Frechet derivative
-!     w ~ (F(q0 + eps_0 * v) - F(q0)) / eps_0
-!   using run_simulation from call_CFD to advance the flow by TTime.
+! The Frechet matvec is done by apply_linearized_operator below:
+!   w = sum_i weights(i) * F(q0 + alphas(i)*eps_0*v) / eps_0
+! where (alphas, weights) come from frechet_stencil.Frechet_weights(order).
+! For order = 1 the stencil is [0, 1] so the alpha=0 sample equals F(q0) --
+! if the caller provides that cached (has_F_q0=.TRUE.), we reuse it and save
+! one CFD solver call per Arnoldi iteration.
 !
-!   TODO: This is CURRENTLY A STUB that returns ERR_ARNOLDI_NOT_IMPLEMENTED,
-!         so arnoldi_eigenvalues aborts on iteration 1 until you implement it.
-!         See the detailed outline in the comment block above the stub.
+! See Mathias & Medeiros (2022), 'Optimal computational parameters for
+! maximum accuracy and minimum cost of Arnoldi-based time-stepping methods'.
 ! =============================================================================
 MODULE Arnoldi
     USE accuracy
     USE error_handling
     USE variables
+    USE setup,          ONLY: stability_time_dir
+    USE read_flow,      ONLY: read_flowfield
+    USE write_flow,     ONLY: write_flowfield
+    USE call_CFD,       ONLY: run_simulation
+    USE frechet_stencil,ONLY: Frechet_weights
+    USE state_vector,   ONLY: NVARS, pack_state, unpack_state
 
     IMPLICIT NONE
 
@@ -65,19 +73,29 @@ MODULE Arnoldi
 CONTAINS
 
     SUBROUTINE arnoldi_eigenvalues(v_init, m, frechet_order, eps_0, TTime, &
+                                   rho0, p0, T0, U0, V0, W0, &
+                                   F_q0_vec, has_F_q0, &
                                    eigenvalues, eigenvectors, ERROR_STATUS, &
                                    skip_normalization, sort_by)
         ! Computes Ritz eigenvalues and eigenvectors of the linearized flow
         ! operator using Arnoldi iteration.
         !
-        ! The matrix-vector product w = A * v is supplied by the internal
-        ! routine apply_linearized_operator, which is intended to approximate
-        ! A via a Frechet-derivative finite difference using external CFD
-        ! solver calls.
+        ! The matvec w = A*v is supplied by the private routine
+        ! apply_linearized_operator below, which approximates A via a
+        ! Frechet-derivative finite difference using run_simulation.
         !
-        ! TODO: apply_linearized_operator is currently a STUB that returns
-        !       ERR_ARNOLDI_NOT_IMPLEMENTED. arnoldi_eigenvalues will therefore
-        !       fail on the first iteration until the real matvec is wired up.
+        ! Inputs:
+        !   v_init      -- starting Krylov vector (length NVARS*Nmesh).
+        !   m           -- requested Krylov subspace size (= krylov_size).
+        !   frechet_order -- 1 or any positive even integer.
+        !   eps_0, TTime -- Frechet magnitude and integration time tau.
+        !   rho0..W0    -- the six per-cell arrays of the base state q0 held
+        !                  in memory for the lifetime of the Arnoldi loop.
+        !   F_q0_vec    -- F(q0) packed to length NVARS*Nmesh; only touched
+        !                  when frechet_order=1 (alpha=0 sample reuse).
+        !   has_F_q0    -- .TRUE. if F_q0_vec is populated. For order > 1
+        !                  the alpha=0 node is never visited, so this flag
+        !                  may safely be .FALSE. with a zero F_q0_vec.
         !
         ! If skip_normalization=.TRUE., the caller MUST ensure ||v_init|| = 1.
 
@@ -87,6 +105,10 @@ CONTAINS
         INTEGER(ik),                         INTENT(IN)  :: frechet_order
         REAL(rk),                            INTENT(IN)  :: eps_0
         REAL(rk),                            INTENT(IN)  :: TTime
+        REAL(rk), DIMENSION(:),              INTENT(IN)  :: rho0, p0, T0
+        REAL(rk), DIMENSION(:),              INTENT(IN)  :: U0, V0, W0
+        REAL(rk), DIMENSION(:),              INTENT(IN)  :: F_q0_vec
+        LOGICAL,                             INTENT(IN)  :: has_F_q0
         COMPLEX(rk), DIMENSION(:),   ALLOCATABLE, INTENT(OUT) :: eigenvalues
         COMPLEX(rk), DIMENSION(:,:), ALLOCATABLE, INTENT(OUT) :: eigenvectors
         INTEGER(ik),                         INTENT(OUT) :: ERROR_STATUS
@@ -167,7 +189,10 @@ CONTAINS
         ! --- Step 2: Arnoldi iteration ---
         DO j = 1, m
             ! w = A * v_j via the linearized-operator matvec (CFD-based)
-            CALL apply_linearized_operator(V(:, j), w, frechet_order, eps_0, TTime, ERROR_STATUS)
+            WRITE(*,'(A,I0,A,I0,A)') '[Arnoldi] iteration ', j, ' of ', m, ': applying A'
+            CALL apply_linearized_operator(V(:, j), w, frechet_order, eps_0, TTime, &
+                                           rho0, p0, T0, U0, V0, W0, &
+                                           F_q0_vec, has_F_q0, ERROR_STATUS)
             IF (ERROR_STATUS /= 0) THEN
                 ! Matvec failed (or is still the stub) — abort cleanly.
                 DEALLOCATE(V, H, H_m, w, w_temp, eval_work, evec_work, RWORK)
@@ -344,50 +369,189 @@ CONTAINS
 
 
     ! -------------------------------------------------------------------------
-    ! apply_linearized_operator  --  STUB (TODO)
+    ! apply_linearized_operator  --  Frechet matvec w = A * v.
     !
-    ! Intended behaviour:
-    !     w = ( F(q0 + eps_0 * v) - F(q0) ) / eps_0
-    ! where F is the nonlinear flow solver advanced by TTime (invoked via
-    ! run_simulation in call_CFD). The resulting w approximates A*v, where
-    ! A is the Jacobian of F linearized about the base state q0.
+    ! Approximates the action of the Jacobian A = dF/dq|_{q0} on an arbitrary
+    ! perturbation v via the finite-difference formula
+    !     w = (1/eps_0) * sum_i weights(i) * F(q0 + alphas(i) * eps_0 * v)
+    ! where (alphas, weights) is the Frechet stencil of the requested order.
     !
-    ! Suggested implementation outline:
-    !   1. Retrieve / cache base state q0 (the current flow field).
-    !   2. Form perturbed state q_pert = q0 + eps_0 * v_in, flatten-mapped
-    !      back to (rho, U, V, W, p, T) and written to the OpenFOAM time dir.
-    !   3. CALL run_simulation(COMMAND_RUN, ierr) to advance by TTime.
-    !   4. Read the advanced perturbed state q_pert_adv.
-    !   5. Ensure the advanced base state q0_adv is available (cache or
-    !      re-advance q0 the same way).
-    !   6. w_out = (q_pert_adv - q0_adv) / eps_0, in the same layout as v_in.
+    ! Each non-zero stencil node requires one external CFD solver run:
+    !   1. Build q_i (per-field) = q0 + alphas(i) * eps_0 * v.
+    !   2. write_flowfield(q_i) -> <stability_dir>/1/ (overwrites the bodies;
+    !      headers are preserved from the seed).
+    !   3. run_simulation(COMMAND_RUN) advances <stab>/1/ to <stab>/<1+TTime>/.
+    !   4. read_flowfield(<stab>/<1+TTime>/) -> F(q_i); pack into a flat
+    !      vector and accumulate weights(i) * vec(F(q_i)) into w_out.
     !
-    ! Until that's implemented, this stub sets w_out = 0 and returns
-    ! ERR_ARNOLDI_NOT_IMPLEMENTED so the Arnoldi loop halts immediately.
+    ! The alphas(i) == 0 node (hit only for frechet_order = 1) is handled
+    ! specially: we reuse the cached F_q0_vec passed in by the caller
+    ! (has_F_q0 == .TRUE.), skipping one CFD run per Arnoldi iteration.
+    !
+    ! Workspace arrays are allocated and freed per call (one matvec = one
+    ! Arnoldi iteration); memory pressure is dominated by V, H which live
+    ! in the driver routine.
     ! -------------------------------------------------------------------------
-    SUBROUTINE apply_linearized_operator(v_in, w_out, frechet_order, eps_0, TTime, ierr)
+    SUBROUTINE apply_linearized_operator(v_in, w_out, frechet_order, eps_0, TTime, &
+                                         rho0, p0, T0, U0, V0, W0, &
+                                         F_q0_vec, has_F_q0, ierr)
         REAL(rk), DIMENSION(:), INTENT(IN)  :: v_in
         REAL(rk), DIMENSION(:), INTENT(OUT) :: w_out
         INTEGER(ik),            INTENT(IN)  :: frechet_order
         REAL(rk),               INTENT(IN)  :: eps_0
-        REAL(rk),               INTENT(IN)  :: TTime
+        REAL(rk),               INTENT(IN)  :: TTime  ! forwarded to solver via controlDict; unused here
+        REAL(rk), DIMENSION(:), INTENT(IN)  :: rho0, p0, T0, U0, V0, W0
+        REAL(rk), DIMENSION(:), INTENT(IN)  :: F_q0_vec
+        LOGICAL,                INTENT(IN)  :: has_F_q0
         INTEGER(ik),            INTENT(OUT) :: ierr
 
-        ! NOTE: frechet_order, eps_0, TTime are INTENT(IN) placeholders for the
-        !       real implementation and are intentionally unused in this stub.
-        !       The compiler may emit "unused dummy argument" warnings; that is
-        !       expected until the real matvec is implemented.
+        ! Stencil
+        REAL(rk), DIMENSION(:), ALLOCATABLE :: alphas, weights
 
-        w_out = 0.0_rk
-        ierr  = ERR_ARNOLDI_NOT_IMPLEMENTED
+        ! Perturbation, unpacked per-field (length Nmesh each)
+        REAL(rk), DIMENSION(:), ALLOCATABLE :: dv_rho, dv_p, dv_T, dv_U, dv_V, dv_W
 
-        CALL log_error(ERR_ARNOLDI_NOT_IMPLEMENTED, &
-            'apply_linearized_operator: Frechet matvec not yet implemented')
+        ! Perturbed state q_i (length Nmesh each)
+        REAL(rk), DIMENSION(:), ALLOCATABLE :: q_rho, q_p, q_T, q_U, q_V, q_W
 
-        ! Silence unused-argument warnings (no runtime effect).
+        ! Solver output F(q_i) read back (length Nmesh each) + grid (scratch)
+        REAL(rk), DIMENSION(:), ALLOCATABLE :: Fr, Fp, FT, FU, FV, FW
+        REAL(rk), DIMENSION(:), ALLOCATABLE :: Xg, Yg, Zg
+        REAL(rk), DIMENSION(:), ALLOCATABLE :: F_vec
+
+        INTEGER(ik) :: Nmesh, data_count_read
+        INTEGER(ik) :: i, alloc_stat
+        CHARACTER(len=256) :: init_dir, end_dir
+
+        ! TTime is an INTENT(IN) placeholder -- the actual integration time
+        ! is controlled by <stability_dir>/system/controlDict. We suppress
+        ! the unused-dummy warning with this harmless reference.
         IF (.FALSE.) THEN
-            w_out(1) = v_in(1) + eps_0 + TTime + REAL(frechet_order, KIND=rk)
+            w_out(1) = w_out(1) + TTime
         END IF
+
+        ierr   = 0
+        Nmesh  = SIZE(rho0)
+        init_dir = stability_time_dir(TSTEP_INITIAL_TIME)
+        end_dir  = stability_time_dir(TSTEP_INITIAL_TIME + TTime)
+
+        ! --- Sanity checks on in/out vector shapes ---
+        IF (SIZE(v_in) /= NVARS * Nmesh .OR. SIZE(w_out) /= NVARS * Nmesh) THEN
+            ierr = ERR_ARNOLDI_INVALID_DIM
+            CALL log_error(ERR_ARNOLDI_INVALID_DIM, &
+                'apply_linearized_operator: v_in/w_out length != NVARS*Nmesh')
+            RETURN
+        END IF
+
+        ! --- Build Frechet stencil (nodes + weights) ---
+        CALL Frechet_weights(frechet_order, alphas, weights, ierr)
+        IF (ierr /= 0) RETURN
+
+        ! --- Allocate workspaces (per-field) ---
+        ALLOCATE(dv_rho(Nmesh), dv_p(Nmesh), dv_T(Nmesh), &
+                 dv_U  (Nmesh), dv_V(Nmesh), dv_W(Nmesh), &
+                 q_rho (Nmesh), q_p (Nmesh), q_T (Nmesh), &
+                 q_U   (Nmesh), q_V (Nmesh), q_W (Nmesh), &
+                 F_vec(NVARS*Nmesh), STAT=alloc_stat)
+        IF (alloc_stat /= 0) THEN
+            ierr = ERR_ARNOLDI_ALLOC
+            CALL log_error(ERR_ARNOLDI_ALLOC, &
+                'apply_linearized_operator: per-field workspace alloc failed')
+            DEALLOCATE(alphas, weights)
+            RETURN
+        END IF
+
+        ! --- Unpack v_in into its six per-field slices (read-only) ---
+        CALL unpack_state(v_in, dv_rho, dv_p, dv_T, dv_U, dv_V, dv_W, ierr)
+        IF (ierr /= 0) THEN
+            DEALLOCATE(alphas, weights, dv_rho, dv_p, dv_T, dv_U, dv_V, dv_W, &
+                       q_rho, q_p, q_T, q_U, q_V, q_W, F_vec)
+            RETURN
+        END IF
+
+        ! --- Accumulate weights(i) * F(q0 + alphas(i)*eps_0*v) ---
+        w_out = 0.0_rk
+        DO i = 1, SIZE(alphas)
+
+            IF (ABS(alphas(i)) < 1.0E-14_rk) THEN
+                ! alpha == 0: reuse cached F(q0) if the caller provided it.
+                ! Otherwise, fall through to a regular CFD run with q_i = q0.
+                IF (has_F_q0) THEN
+                    WRITE(*,'(A,ES12.4,A,ES12.4,A)') &
+                        '  [matvec] alpha=', alphas(i), '  weight=', weights(i), &
+                        '  (reusing cached F(q0))'
+                    w_out = w_out + weights(i) * F_q0_vec
+                    CYCLE
+                END IF
+            END IF
+
+            ! Build perturbed state per-field: q = q0 + alpha*eps*dv.
+            q_rho = rho0 + alphas(i) * eps_0 * dv_rho
+            q_p   = p0   + alphas(i) * eps_0 * dv_p
+            q_T   = T0   + alphas(i) * eps_0 * dv_T
+            q_U   = U0   + alphas(i) * eps_0 * dv_U
+            q_V   = V0   + alphas(i) * eps_0 * dv_V
+            q_W   = W0   + alphas(i) * eps_0 * dv_W
+
+            WRITE(*,'(A,ES12.4,A,ES12.4)') &
+                '  [matvec] alpha=', alphas(i), '  weight=', weights(i)
+
+            ! Write perturbed state into <stability_dir>/1/
+            CALL write_flowfield(q_rho, q_p, q_T, q_U, q_V, q_W, Nmesh, ierr, &
+                                 path_override=init_dir)
+            IF (ierr /= 0) THEN
+                DEALLOCATE(alphas, weights, dv_rho, dv_p, dv_T, dv_U, dv_V, dv_W, &
+                           q_rho, q_p, q_T, q_U, q_V, q_W, F_vec)
+                RETURN
+            END IF
+
+            ! Advance CFD solver by TTime
+            CALL run_simulation(TRIM(COMMAND_RUN), ierr)
+            IF (ierr /= 0) THEN
+                DEALLOCATE(alphas, weights, dv_rho, dv_p, dv_T, dv_U, dv_V, dv_W, &
+                           q_rho, q_p, q_T, q_U, q_V, q_W, F_vec)
+                RETURN
+            END IF
+
+            ! Read advanced state from <stability_dir>/<1+TTime>/
+            CALL read_flowfield(Fr, Fp, FT, FU, FV, FW, Xg, Yg, Zg, &
+                                data_count_read, ierr, path_override=end_dir)
+            IF (ierr /= 0) THEN
+                DEALLOCATE(alphas, weights, dv_rho, dv_p, dv_T, dv_U, dv_V, dv_W, &
+                           q_rho, q_p, q_T, q_U, q_V, q_W, F_vec)
+                IF (ALLOCATED(Fr)) DEALLOCATE(Fr, Fp, FT, FU, FV, FW, Xg, Yg, Zg)
+                RETURN
+            END IF
+
+            IF (data_count_read /= Nmesh) THEN
+                ierr = ERR_ARNOLDI_INVALID_DIM
+                CALL log_error(ERR_ARNOLDI_INVALID_DIM, &
+                    'matvec: post-solver data_count /= Nmesh')
+                DEALLOCATE(alphas, weights, dv_rho, dv_p, dv_T, dv_U, dv_V, dv_W, &
+                           q_rho, q_p, q_T, q_U, q_V, q_W, F_vec, &
+                           Fr, Fp, FT, FU, FV, FW, Xg, Yg, Zg)
+                RETURN
+            END IF
+
+            ! Pack F(q_i) and accumulate.
+            CALL pack_state(Fr, Fp, FT, FU, FV, FW, F_vec, ierr)
+            IF (ierr /= 0) THEN
+                DEALLOCATE(alphas, weights, dv_rho, dv_p, dv_T, dv_U, dv_V, dv_W, &
+                           q_rho, q_p, q_T, q_U, q_V, q_W, F_vec, &
+                           Fr, Fp, FT, FU, FV, FW, Xg, Yg, Zg)
+                RETURN
+            END IF
+
+            w_out = w_out + weights(i) * F_vec
+
+            DEALLOCATE(Fr, Fp, FT, FU, FV, FW, Xg, Yg, Zg)
+        END DO
+
+        ! Divide by eps to complete the Frechet derivative.
+        w_out = w_out / eps_0
+
+        DEALLOCATE(alphas, weights, dv_rho, dv_p, dv_T, dv_U, dv_V, dv_W, &
+                   q_rho, q_p, q_T, q_U, q_V, q_W, F_vec)
     END SUBROUTINE apply_linearized_operator
 
 END MODULE Arnoldi

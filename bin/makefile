@@ -33,15 +33,16 @@ OBJECTS = accuracy.o \
 	  error_handling.o \
 	  variables.o \
 	  setup.o \
+	  state_vector.o \
 	  frechet_stencil.o \
-	  Arnoldi.o \
-	  write_eigendata.o \
 	  OpenFOAM_IO.o \
 	  read_flow.o \
-	  write_output.o \
-	  call_CFD.o \
-	  random_disturbance.o \
 	  write_flow.o \
+	  call_CFD.o \
+	  Arnoldi.o \
+	  write_eigendata.o \
+	  write_output.o \
+	  random_disturbance.o \
 	  main.o
 
 # Compilation rule

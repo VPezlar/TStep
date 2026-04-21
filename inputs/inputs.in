@@ -1,40 +1,64 @@
-! ============================================================================
-! TStep Configuration File
-! ============================================================================
-! This file contains configuration settings for the TStep time-stepping
-! framework. Settings are organized into separate namelists:
-!   - General: solver-agnostic settings
-!   - OpenFOAM: OpenFOAM-specific settings
-! Future solver support can be added by creating additional namelists
-! (e.g., &SU2, &CGNS, etc.)
-! ============================================================================
+! =============================================================================
+! TStep configuration file
+!
+! Two-folder path model:
+!   SACRED baseflow archive (never written by TStep):
+!     baseflow_grid  -- full path to the grid cell-centers file (C)
+!     baseflow_field -- directory with p, rho, T, U (must end with '/')
+!
+!   Stability case (all TStep output goes here):
+!     stability_dir  -- analysis/working case root (must end with '/')
+!
+! Workflow TStep executes:
+!   Init (once):
+!     1. Read baseflow_grid + baseflow_field into memory.
+!     2. Seed <stability_dir>/1/ with p, rho, T, U copied from baseflow_field.
+!     3. Run the CFD solver once ('COMMAND_RUN'): advances <stab>/1/ to
+!        <stab>/<1+TTime>/. Warmup pass.
+!     4. Promote <stab>/<1+TTime>/ back over <stab>/1/. Now /1/ holds q0,
+!        the discretely-consistent base state used by Arnoldi.
+!     5. Write q0 CSV (<stability_dir>/flowfield.csv) for inspection.
+!     6. For frechet_order == 1: run the solver once more from /1/ to cache
+!        F(q0) in memory (reused for the alpha=0 stencil node each iter).
+!
+!   Arnoldi loop (krylov_size iterations; set krylov_size=2 for debug):
+!     For each j = 1..krylov_size:
+!       a. Form q_i = q0 + alpha_i * eps_0 * v_j for each Frechet stencil
+!          node alpha_i (built by frechet_stencil at frechet_order).
+!       b. Write q_i to <stab>/1/, run CFD, read <stab>/<1+TTime>/.
+!       c. Accumulate w_j += weights(i) * vec(F(q_i)).
+!     Divide w_j by eps_0, orthogonalize, continue.
+!
+!   Final: write eigenvalues/eigenvectors under <stability_dir>/.
+!
+! Required controlDict settings in <stability_dir>/system/controlDict:
+!   startFrom     startTime;
+!   startTime     1.0;                   (= TSTEP_INITIAL_TIME)
+!   endTime       <1.0 + TTime>;         (keep in sync with TTime below!)
+!   writeInterval <= endTime - startTime so only the endpoint is written
+!   timeFormat    general;
+!   timePrecision 6;
+!   purgeWrite    0;                     (TStep overwrites <1+TTime>/ itself)
+! =============================================================================
 
-! General Settings (solver-agnostic)
 &General
-    flow_format = 'OpenFOAM',     ! Solver format: 'OpenFOAM', 'SU2', etc.
-    output_file = '../output/flowfield.csv',  ! Path to CSV output file
-    dist_mag    = 1.0d-3,         ! Magnitude for random disturbance scaling
-    COMMAND_RUN = 'rhoCentralFoam -case /home/vojtech-p/work/openfoam/OpenFOAM-v2506/tutorials/compressible/rhoCentralFoam/wedge15Ma5',  ! Simple command for testing (was: rhoCentralFoam)
+    flow_format = 'OpenFOAM',
+    eps_0       = 1.0d-6,            ! Frechet perturbation magnitude
+    COMMAND_RUN = 'cd /home/vojtech-p/work/Projects/TStep_Dev/wedge15Ma5/Stab_TS && rhoCentralFoam',
 /
 
-! Arnoldi Settings (for eigenvalue computation)
 &Arnoldi
-    krylov_size = 100,                   ! Krylov subspace size (number of eigenvalues to compute)
-    frechet_order = 1,                   ! Order of Frechet derivative (1 or even integer)
-    eigenvalue_sort_by = 'magnitude',    ! Sort eigenvalues by: 'imaginary', 'real', or 'magnitude'
-    eps_0 = 1.0d-6,                      ! Epsilon parameter (unused for now)
-    TTime = 1.0,                         ! Time parameter (unused for now)
-    num_threads = 1,                     ! Number of BLAS/LAPACK threads (0 = auto, use all cores)
-                                          ! IMPORTANT: On HPC login nodes, set to 2-4 to avoid overloading
-                                          ! On compute nodes: 0 (auto) or match allocated cores
-                                          ! Examples: 0 (auto), 1 (serial), 4 (quad-core), 8 (8-core)
+    krylov_size        = 2,           ! debug: 2-3 iterations; raise for production
+    frechet_order      = 1,           ! 1 (two-point) or any positive even integer
+    eigenvalue_sort_by = 'magnitude',
+    TTime              = 0.1,         ! integration time tau; endTime in controlDict must equal 1.0 + TTime
+    num_threads        = 1,
 /
 
-! OpenFOAM-Specific Settings
 &OpenFOAM
-    N_HEADER_grid = 21,           ! Number of header lines in grid coordinate file
-    N_HEADER_var  = 21,           ! Number of header lines in variable files
-    file_grid_in  = '/home/vojtech-p/work/openfoam/OpenFOAM-v2506/tutorials/compressible/rhoCentralFoam/wedge15Ma5/0/C',
-    file_var_in   = '/home/vojtech-p/work/openfoam/OpenFOAM-v2506/tutorials/compressible/rhoCentralFoam/wedge15Ma5/0.2/',
-    file_var_out  = '/home/vojtech-p/work/openfoam/OpenFOAM-v2506/tutorials/compressible/rhoCentralFoam/wedge15Ma5/0.1/',
+    N_HEADER_grid  = 21,
+    N_HEADER_var   = 21,
+    baseflow_grid  = '/home/vojtech-p/work/Projects/TStep_Dev/wedge15Ma5/BF/0/C',
+    baseflow_field = '/home/vojtech-p/work/Projects/TStep_Dev/wedge15Ma5/BF/1/',
+    stability_dir  = '/home/vojtech-p/work/Projects/TStep_Dev/wedge15Ma5/Stab_TS/',
 /

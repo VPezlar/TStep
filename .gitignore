@@ -5,6 +5,8 @@ bin/TStep
 
 # Runtime outputs
 bin/disturbance.txt
+bin/frechet_stencil.txt
+bin/test_state_vector
 bin/eigenvalues.txt
 bin/fort.*
 output/*.dat

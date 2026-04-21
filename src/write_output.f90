@@ -2,7 +2,8 @@
 ! write_output  --  writes a single human-readable CSV of the flowfield for
 !                   post-processing, plotting, and debugging.
 !
-! Produces one flat file at `output_file` (e.g. ../output/flowfield.csv) with
+! Produces one flat file at <stability_dir>/flowfield.csv (composed via
+! setup.f90:stability_output_path('flowfield.csv')) with
 ! 9 columns: X,Y,Z,rho,p,T,U,V,W (one row per cell, scientific notation).
 ! Grid coordinates are included because a CSV has no implicit mesh. Format is
 ! solver-agnostic -- anything readable by pandas/MATLAB/ParaView etc.
@@ -36,18 +37,24 @@ CONTAINS
 
         error_status = 0
 
-        ! Get a free file unit
-        CALL get_unit(unit_num)
+        ! Resolve the CSV path inside the stability case and open it.
+        ! stability_output_path() yields '<stability_dir>/flowfield.csv', and
+        ! stability_dir is guaranteed to exist by validate_paths, so 'replace'
+        ! always succeeds barring filesystem-level issues.
+        BLOCK
+            CHARACTER(len=256) :: csv_path
+            csv_path = stability_output_path('flowfield.csv')
 
-        ! Open the output file
-        OPEN(unit=unit_num, file=TRIM(output_file), status='replace', &
-            action='write', iostat=iostat_val)
+            CALL get_unit(unit_num)
+            OPEN(unit=unit_num, file=TRIM(csv_path), status='replace', &
+                action='write', iostat=iostat_val)
 
-        IF (iostat_val /= 0) THEN
-            error_status = ERR_OUTPUT_FILE_OPEN
-            CALL log_error(ERR_OUTPUT_FILE_OPEN, 'File: '//TRIM(output_file))
-            RETURN
-        END IF
+            IF (iostat_val /= 0) THEN
+                error_status = ERR_OUTPUT_FILE_OPEN
+                CALL log_error(ERR_OUTPUT_FILE_OPEN, 'File: '//TRIM(csv_path))
+                RETURN
+            END IF
+        END BLOCK
 
         ! Write header line with coordinates first
         WRITE(unit_num, '(A)') 'X,Y,Z,rho,p,T,U,V,W'
@@ -61,7 +68,7 @@ CONTAINS
 
         CLOSE(unit_num)
 
-        WRITE(*,*) 'SUCCESS: Flowfield data written to', TRIM(output_file)
+        WRITE(*,*) 'SUCCESS: Flowfield data written to ', TRIM(stability_output_path('flowfield.csv'))
 
     END SUBROUTINE write_flowfield_data
 
