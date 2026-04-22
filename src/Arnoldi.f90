@@ -279,8 +279,13 @@ CONTAINS
                 RETURN
             END IF
 
+            !
             DO i = 1, m_eff
                 eigenvalues(i) = CMPLX(eval_real(i), eval_imag(i), KIND=rk)
+            END DO
+
+            DO i = 1, m_eff
+                eigenvalues(i) = LOG(eigenvalues(i)) / TTime
             END DO
 
             ! --- Step 5: Ritz vectors = V * (right eigenvectors of H_m) ---
@@ -504,6 +509,9 @@ CONTAINS
                            q_rho, q_p, q_T, q_U, q_V, q_W, F_vec)
                 RETURN
             END IF
+
+            ! Delete end_time folder to prevent wrong rewrites
+            CALL EXECUTE_COMMAND_LINE('rm -rf ' // TRIM(end_dir), wait=.TRUE.)
 
             ! Advance CFD solver by TTime
             CALL run_simulation(TRIM(COMMAND_RUN), ierr)

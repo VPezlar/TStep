@@ -144,6 +144,13 @@ PROGRAM main
         STOP ERR_MAIN_EXT_CMD
     END IF
 
+    LOGICAL :: endpoint_exists
+    INQUIRE(FILE=TRIM(stability_time_dir(TSTEP_INITIAL_TIME + TTime)), EXIST=endpoint_exists)
+    IF (.NOT. endpoint_exists) THEN
+        CALL log_error(ERR_SETUP_INVALID_PARAM, 'Solver endpoint missing. Check controlDict.endTime.')
+        STOP
+    END IF
+
     ! --- 6. Promote warmup output to /1/: now /1/ holds q0 ---
     CALL promote_to_initial_state(error_status)
     IF (error_status /= 0) THEN
