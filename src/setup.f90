@@ -490,12 +490,15 @@ CONTAINS
     END FUNCTION time_to_str
 
 
+! -------------------------------------------------------------------------
     ! Helper subroutine to safely get an unused file unit number.
+    ! -------------------------------------------------------------------------
     SUBROUTINE get_unit(u)
-        INTEGER(ik) :: u
+        INTEGER(ik), INTENT(OUT) :: u
         INTEGER(ik) :: i
         LOGICAL :: is_opened
 
+        ! Scan available units in the standard Fortran range
         DO i = 10, 99
             INQUIRE(unit=i, opened=is_opened)
             IF (.NOT. is_opened) THEN
@@ -504,7 +507,12 @@ CONTAINS
             END IF
         END DO
 
-        u = 88
+        ! If the loop completes, no units are available.
+        ! We log the error and halt immediately to prevent silent corruption
+        ! of unit 88 or any other active file handle.
+        CALL log_error(ERR_SETUP_FILE_OPEN, 'get_unit: No available I/O units in range 10-99.')
+        STOP ERR_SETUP_FILE_OPEN
+
     END SUBROUTINE get_unit
 
 
