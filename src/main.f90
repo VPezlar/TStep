@@ -249,7 +249,7 @@ PROGRAM main
     ! =========================================================================
     ! OUTPUT
     ! =========================================================================
-    CALL write_eigen_files(eigenvalues, eigenvectors, Xgrid, Ygrid, Zgrid, ierr)
+    CALL write_eigen_files(eigenvalues, eigenvectors, Xgrid, Ygrid, Zgrid, error_status)
     IF (error_status /= 0) THEN
         CALL log_error(ERR_MAIN_WRITE_OUTPUT)
         CALL cleanup_allocations()
