@@ -46,7 +46,8 @@ MODULE setup
 
     PUBLIC :: configurationRead, validate_paths, seed_stability_initial, &
               promote_to_initial_state, stability_time_dir, &
-              stability_output_path, get_unit, INT_TO_STR, time_to_str
+              stability_output_path, clear_endpoint_folder, &
+              find_endpoint_folder, get_unit, INT_TO_STR, time_to_str
 
 CONTAINS
 
@@ -174,6 +175,12 @@ CONTAINS
             RETURN
         END IF
 
+        ! Ensure the standard output subfolder exists under stability_dir.
+        ! TStep deposits flowfield.csv / eigenvalues.dat / eigenvectors.dat
+        ! in <stability_dir>/output/, composed internally (no user knob).
+        CALL EXECUTE_COMMAND_LINE('mkdir -p '//TRIM(stability_dir)//'output/', &
+                                  wait=.TRUE.)
+
         WRITE(*,'(A)')         '---------------------------------------'
         WRITE(*,'(A)')         'TStep validated paths:'
         WRITE(*,'(A,A)')       '  baseflow_grid  = ', TRIM(baseflow_grid)
@@ -285,7 +292,8 @@ CONTAINS
 
         ierr = 0
         init_dir = TRIM(stability_time_dir(TSTEP_INITIAL_TIME))
-        end_dir  = TRIM(stability_time_dir(TSTEP_INITIAL_TIME + TTime))
+        CALL find_endpoint_folder(end_dir, ierr)
+        IF (ierr /= 0) RETURN
 
         cmd = 'cp -af ' // TRIM(end_dir) // 'p '    // &
                           TRIM(end_dir) // 'rho '  // &
@@ -307,7 +315,10 @@ CONTAINS
 
 
     ! -------------------------------------------------------------------------
-    ! stability_output_path  --  compose '<stability_dir>/<filename>'.
+    ! stability_output_path  --  compose '<stability_dir>/output/<filename>'.
+    ! The 'output/' subfolder is a standardised location composed
+    ! internally; users configure only stability_dir. validate_paths
+    ! mkdir -p's it on startup so writes never fail on a missing parent.
     !
     ! Used by write_output / write_eigendata so every TStep artefact lands
     ! under the stability case root (sacred baseflow folders are never
@@ -316,24 +327,122 @@ CONTAINS
     PURE FUNCTION stability_output_path(filename) RESULT(p)
         CHARACTER(len=*), INTENT(IN) :: filename
         CHARACTER(len=256)           :: p
-        p = TRIM(stability_dir) // TRIM(filename)
+        p = TRIM(stability_dir) // 'output/' // TRIM(filename)
     END FUNCTION stability_output_path
+
+    ! -------------------------------------------------------------------------
+    ! clear_endpoint_folder  --  wipe every non-initial numeric time folder
+    ! under stability_dir so the solver is guaranteed a clean slate for its
+    ! endpoint write.
+    !
+    ! Rationale: OpenFOAM's time loop accumulates IEEE-754 round-off. For
+    ! TTime = 0.1 with deltaT = 1e-4, after ~1000 steps the internal time is
+    ! 1.099999999999989 (not 1.1 exactly). Depending on timePrecision and
+    ! pre-existing folders, OpenFOAM may write '<stab>/1.1/' OR
+    ! '<stab>/1.099999999999989/' -- and can even auto-bump timePrecision to
+    ! disambiguate. TStep is not in the business of predicting that name
+    ! anymore: we clear all candidate endpoint folders first, then pick
+    ! whatever single folder appears after the solver call via
+    ! find_endpoint_folder() below.
+    !
+    ! The glob deliberately excludes '<stab>/1/' (the initial state) and
+    ! non-numeric folders (constant, system, output, ...). Safe because the
+    ! deletion targets are strictly inside stability_dir.
+    ! -------------------------------------------------------------------------
+    SUBROUTINE clear_endpoint_folder(ierr)
+        INTEGER(ik), INTENT(OUT) :: ierr
+        CHARACTER(len=1024) :: cmd
+        ierr = 0
+        ! find <stab> -maxdepth 1 -type d -regex '<stab>/[0-9][0-9.]*' -not
+        ! -path '<stab>/1' -exec rm -rf {} +
+        cmd = 'find '//TRIM(stability_dir)//&
+              ' -maxdepth 1 -type d -regextype posix-extended'//&
+              ' -regex '''//TRIM(stability_dir)//'[0-9]+(\.[0-9]+)?'''//&
+              ' -not -path '''//TRIM(stability_dir)//'1'''//&
+              ' -exec rm -rf {} +'
+        CALL EXECUTE_COMMAND_LINE(TRIM(cmd), wait=.TRUE.)
+    END SUBROUTINE clear_endpoint_folder
+
+
+    ! -------------------------------------------------------------------------
+    ! find_endpoint_folder  --  return the latest numeric-named subfolder of
+    ! stability_dir, excluding the initial '1/' seed.
+    !
+    ! Used as the source path for every endpoint read. Fully decouples TStep
+    ! from OpenFOAM's timePrecision / IEEE-round-off dance: whatever the
+    ! solver decided to call its output folder ('1.1/', '1.099999999999989/',
+    ! etc.), we pick it up. Returns an empty string + ierr on failure so the
+    ! caller can surface a clear error.
+    !
+    ! Implementation: shell pipeline writes the folder name to a tmp file,
+    ! Fortran reads it back. ls+awk+sort -g+tail -n1 gives us the largest
+    ! numeric folder name > '1/'.
+    ! -------------------------------------------------------------------------
+    SUBROUTINE find_endpoint_folder(path, ierr)
+        CHARACTER(len=256), INTENT(OUT) :: path
+        INTEGER(ik),        INTENT(OUT) :: ierr
+        CHARACTER(len=1024) :: cmd
+        CHARACTER(len=256)  :: folder_name
+        CHARACTER(len=256)  :: tmpfile
+        INTEGER             :: u, io_stat
+
+        ierr        = 0
+        path        = ''
+        folder_name = ''
+        tmpfile     = '/tmp/tstep_endpoint.txt'
+
+        ! List <stab>, keep numeric names != '1', sort by value, pick max.
+        ! awk pattern: /^[0-9]/ matches numeric-starting names; $0 != "1"
+        ! excludes the initial-state folder.
+        cmd = 'cd '//TRIM(stability_dir)//' && ls -1 2>/dev/null'//&
+              ' | awk ''/^[0-9]/ && $0 != "1"'''//&
+              ' | sort -g | tail -n 1 > '//TRIM(tmpfile)
+        CALL EXECUTE_COMMAND_LINE(TRIM(cmd), wait=.TRUE.)
+
+        CALL get_unit(u)
+        OPEN(u, file=TRIM(tmpfile), status='old', action='read', iostat=io_stat)
+        IF (io_stat == 0) THEN
+            READ(u, '(A)', iostat=io_stat) folder_name
+            CLOSE(u)
+        END IF
+
+        IF (LEN_TRIM(folder_name) == 0) THEN
+            ierr = ERR_SETUP_INVALID_PARAM
+            CALL log_error(ERR_SETUP_INVALID_PARAM, &
+                'find_endpoint_folder: no post-solver time folder found under '&
+                //TRIM(stability_dir)//' (solver did not write, or controlDict wrong)')
+            RETURN
+        END IF
+
+        path = TRIM(stability_dir)//TRIM(folder_name)//'/'
+    END SUBROUTINE find_endpoint_folder
 
 
     ! -------------------------------------------------------------------------
     ! time_to_str  --  format a real number the way OpenFOAM does under
-    !                  'timeFormat general, timePrecision 6'.
+    !                  'timeFormat general, timePrecision 15'.
+    !
+    ! Bulletproof choice: 15 fractional digits sits right at the IEEE 754
+    ! double-precision limit (REAL64 has ~15.95 sig figs), so Fortran's
+    ! round-half-to-even absorbs the trailing-bit noise that IEEE addition
+    ! introduces (e.g. 1.0d0 + 0.1d0 = 1.10000000000000008881...). After
+    ! the trailing-zero strip below, such values collapse back to their
+    ! canonical form ('1.1'), which is exactly what OpenFOAM writes at
+    ! timePrecision 15 in 'general' format.
     !
     ! Rule:
-    !   - For |t| >= 1e-4 or t == 0:  fixed-point, up to 6 decimal digits,
+    !   - For |t| >= 1e-4 or t == 0:  fixed-point, up to 15 decimal digits,
     !     trailing zeros (and the decimal point if bare) stripped.
     !     Examples: 1.0 -> '1',  1.1 -> '1.1',  0.02 -> '0.02',
-    !               1.000001 -> '1.000001',  0.0001 -> '0.0001'.
+    !               1.000001 -> '1.000001',
+    !               1.123456789012345 -> '1.123456789012345'.
     !   - For 0 < |t| < 1e-4:  scientific. NOT supported by TStep today;
     !     we abort via empty-string return. Callers must stay in range.
     !
     ! Matching OpenFOAM's convention exactly lets us predict the solver-output
-    ! folder name without running OpenFOAM first.
+    ! folder name without running OpenFOAM first. The controlDict MUST use
+    ! timePrecision 15 (recommended) or any lower value for which the
+    ! endpoint time has no digits that would be truncated.
     ! -------------------------------------------------------------------------
     PURE FUNCTION time_to_str(t) RESULT(s)
         REAL(rk), INTENT(IN) :: t
@@ -345,7 +454,7 @@ CONTAINS
 
             ! F0.6 can produce '.02' (no leading zero) on some compilers.
             ! OpenFOAM always writes '0.02', so reinsert the leading zero.
-            WRITE(buf, '(F0.6)') t
+            WRITE(buf, '(F0.15)') t
             IF (buf(1:1) == '.') THEN
                 buf = '0' // buf(1:LEN_TRIM(buf))
             ELSE IF (buf(1:2) == '-.') THEN

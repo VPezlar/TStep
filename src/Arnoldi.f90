@@ -26,7 +26,8 @@ MODULE Arnoldi
     USE accuracy
     USE error_handling
     USE variables
-    USE setup,          ONLY: stability_time_dir
+    USE setup,          ONLY: stability_time_dir, clear_endpoint_folder, &
+                              find_endpoint_folder
     USE read_flow,      ONLY: read_flowfield
     USE write_flow,     ONLY: write_flowfield
     USE call_CFD,       ONLY: run_simulation
@@ -284,9 +285,14 @@ CONTAINS
                 eigenvalues(i) = CMPLX(eval_real(i), eval_imag(i), KIND=rk)
             END DO
 
-            DO i = 1, m_eff
-                eigenvalues(i) = LOG(eigenvalues(i)) / TTime
-            END DO
+            ! Keep eigenvalues as the raw DGEEV output mu_i -- these
+            ! are the Ritz eigenvalues of the time-tau flow operator
+            ! exp(tau*A). Do NOT apply LOG(mu)/tau here: LOG's principal
+            ! branch gives artificial imaginary parts +- pi/tau for any
+            ! negative-real mu (common for decaying, non-oscillatory
+            ! modes), which polluted the results. Continuous-time
+            ! lambda = log(mu)/tau is computed (with branch warnings)
+            ! in write_eigen_files alongside mu itself.
 
             ! --- Step 5: Ritz vectors = V * (right eigenvectors of H_m) ---
             ! Handle real / complex-conjugate pairs as stored by DGEEV.
@@ -510,10 +516,12 @@ CONTAINS
                 RETURN
             END IF
 
-            ! Delete end_time folder to prevent wrong rewrites
-            CALL EXECUTE_COMMAND_LINE('rm -rf ' // TRIM(end_dir), wait=.TRUE.)
-
-            ! Advance CFD solver by TTime
+            ! Clear stale endpoint folder, then advance the CFD solver by TTime.
+            ! Critical: without this, OpenFOAM round-off (1.0 + 1000*1e-4 !=
+            ! 1.1 exactly) collides with the existing 1.1/ folder and the
+            ! solver auto-bumps timePrecision, writing its output elsewhere.
+            ! TStep then reads stale data and Arnoldi breaks down immediately.
+            CALL clear_endpoint_folder(ierr)
             CALL run_simulation(TRIM(COMMAND_RUN), ierr)
             IF (ierr /= 0) THEN
                 DEALLOCATE(alphas, weights, dv_rho, dv_p, dv_T, dv_U, dv_V, dv_W, &
@@ -521,9 +529,34 @@ CONTAINS
                 RETURN
             END IF
 
-            ! Read advanced state from <stability_dir>/<1+TTime>/
-            CALL read_flowfield(Fr, Fp, FT, FU, FV, FW, Xg, Yg, Zg, &
-                                data_count_read, ierr, path_override=end_dir)
+            ! Robust post-solver endpoint lookup: ask setup for whichever
+            ! numeric-named folder OpenFOAM actually wrote (1.1/,
+            ! 1.099999999999989/, ...). Fully decouples us from
+            ! timePrecision / IEEE-754 round-off in OpenFOAM's time loop.
+            BLOCK
+                CHARACTER(len=256) :: ep_mat
+                LOGICAL :: ep_exists
+                CALL find_endpoint_folder(ep_mat, ierr)
+                IF (ierr /= 0) THEN
+                    DEALLOCATE(alphas, weights, dv_rho, dv_p, dv_T, dv_U, dv_V, dv_W, &
+                               q_rho, q_p, q_T, q_U, q_V, q_W, F_vec)
+                    RETURN
+                END IF
+                INQUIRE(FILE=TRIM(ep_mat)//'p', EXIST=ep_exists)
+                IF (.NOT. ep_exists) THEN
+                    ierr = ERR_ARNOLDI_INVALID_DIM
+                    CALL log_error(ERR_ARNOLDI_INVALID_DIM, &
+                        'matvec: endpoint folder '//TRIM(ep_mat)//&
+                        ' has no p file.')
+                    DEALLOCATE(alphas, weights, dv_rho, dv_p, dv_T, dv_U, dv_V, dv_W, &
+                               q_rho, q_p, q_T, q_U, q_V, q_W, F_vec)
+                    RETURN
+                END IF
+
+                ! Read advanced state from the folder OpenFOAM just wrote.
+                CALL read_flowfield(Fr, Fp, FT, FU, FV, FW, Xg, Yg, Zg, &
+                                    data_count_read, ierr, path_override=ep_mat)
+            END BLOCK
             IF (ierr /= 0) THEN
                 DEALLOCATE(alphas, weights, dv_rho, dv_p, dv_T, dv_U, dv_V, dv_W, &
                            q_rho, q_p, q_T, q_U, q_V, q_W, F_vec)

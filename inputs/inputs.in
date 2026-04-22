@@ -1,13 +1,18 @@
 ! =============================================================================
 ! TStep configuration file
 !
-! Two-folder path model:
+! Paths (TStep uses two roots):
 !   SACRED baseflow archive (never written by TStep):
 !     baseflow_grid  -- full path to the grid cell-centers file (C)
 !     baseflow_field -- directory with p, rho, T, U (must end with '/')
 !
-!   Stability case (all TStep output goes here):
-!     stability_dir  -- analysis/working case root (must end with '/')
+!   Working case + output (all TStep writes go here):
+!     stability_dir  -- analysis/working case root; must end with '/'.
+!                       TStep writes <stab>/1/ and <stab>/<1+TTime>/ for the
+!                       CFD warmup and Arnoldi matvec, plus a standardised
+!                       <stab>/output/ subfolder (composed internally) where
+!                       flowfield.csv, eigenvalues.dat and eigenvectors.dat
+!                       land on every run.
 !
 ! Workflow TStep executes:
 !   Init (once):
@@ -17,7 +22,7 @@
 !        <stab>/<1+TTime>/. Warmup pass.
 !     4. Promote <stab>/<1+TTime>/ back over <stab>/1/. Now /1/ holds q0,
 !        the discretely-consistent base state used by Arnoldi.
-!     5. Write q0 CSV (<stability_dir>/flowfield.csv) for inspection.
+!     5. Write q0 CSV to <stab>/output/flowfield.csv for inspection.
 !     6. For frechet_order == 1: run the solver once more from /1/ to cache
 !        F(q0) in memory (reused for the alpha=0 stencil node each iter).
 !
@@ -29,7 +34,7 @@
 !       c. Accumulate w_j += weights(i) * vec(F(q_i)).
 !     Divide w_j by eps_0, orthogonalize, continue.
 !
-!   Final: write eigenvalues/eigenvectors under <stability_dir>/.
+!   Final: write eigenvalues.dat and eigenvectors.dat under <stab>/output/.
 !
 ! Required controlDict settings in <stability_dir>/system/controlDict:
 !   startFrom     startTime;
@@ -37,23 +42,23 @@
 !   endTime       <1.0 + TTime>;         (keep in sync with TTime below!)
 !   writeInterval <= endTime - startTime so only the endpoint is written
 !   timeFormat    general;
-!   timePrecision 6;
+!   timePrecision 15;
 !   purgeWrite    0;                     (TStep overwrites <1+TTime>/ itself)
 ! =============================================================================
 
 &General
     flow_format = 'OpenFOAM',
-    eps_0       = 1.0d-6,            ! Frechet perturbation magnitude
+    eps_0       = 1.0d-3,            ! Frechet perturbation magnitude (too small -> round-off noise)
     COMMAND_RUN = 'cd /home/vojtech-p/work/Projects/TStep_Dev/wedge15Ma5/Stab_TS && rhoCentralFoam',
 /
 
 &Arnoldi
-    krylov_size        = 2,           ! debug: 2-3 iterations; raise for production
-    frechet_order      = 1,           ! 1 (two-point) or any positive even integer
+    krylov_size        = 5,           ! debug: 2-3 iterations; raise for production
+    frechet_order      = 2,           ! 1 (two-point) or any positive even integer
     eigenvalue_sort_by = 'imaginary',
     TTime              = 0.1,         ! integration time tau; endTime in controlDict must equal 1.0 + TTime
     num_threads        = 1,
-    N_eig_write        = 10,          ! Number of leading eigenvectors to export to disk
+    N_eig_write        = 5,           ! Number of leading eigenvectors to export to disk
 /
 
 &OpenFOAM

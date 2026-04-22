@@ -137,6 +137,7 @@ PROGRAM main
 
     ! --- 5. CFD warmup pass: <stab>/1/ -> <stab>/<1+TTime>/ ---
     WRITE(*,'(A)') '[init] CFD warmup pass (digest raw baseflow)'
+    CALL clear_endpoint_folder(error_status)
     CALL run_simulation(TRIM(COMMAND_RUN), error_status)
     IF (error_status /= 0) THEN
         CALL log_error(ERR_MAIN_EXT_CMD)
@@ -144,12 +145,26 @@ PROGRAM main
         STOP ERR_MAIN_EXT_CMD
     END IF
 
+    ! Verify the solver actually produced an endpoint folder, and pin down
+    ! its name via find_endpoint_folder(). This decouples TStep from
+    ! OpenFOAM's timePrecision / round-off behaviour: whatever the solver
+    ! called its output folder (1.1/, 1.099999999999989/, ...), we pick it
+    ! up by scanning <stability_dir> for the latest numeric-named folder.
     BLOCK
-        LOGICAL :: endpoint_exists
-        INQUIRE(FILE=TRIM(stability_time_dir(TSTEP_INITIAL_TIME + TTime)), EXIST=endpoint_exists)
-        IF (.NOT. endpoint_exists) THEN
-            CALL log_error(ERR_SETUP_INVALID_PARAM, 'Solver endpoint missing. Check controlDict.endTime.')
-            STOP
+        CHARACTER(len=256) :: ep_warmup
+        LOGICAL :: ep_file_exists
+        CALL find_endpoint_folder(ep_warmup, error_status)
+        IF (error_status /= 0) THEN
+            CALL cleanup_allocations()
+            STOP ERR_SETUP_INVALID_PARAM
+        END IF
+        INQUIRE(FILE=TRIM(ep_warmup)//'p', EXIST=ep_file_exists)
+        IF (.NOT. ep_file_exists) THEN
+            CALL log_error(ERR_SETUP_INVALID_PARAM, &
+                'Warmup endpoint folder '//TRIM(ep_warmup)//&
+                ' exists but has no p file. Check controlDict.')
+            CALL cleanup_allocations()
+            STOP ERR_SETUP_INVALID_PARAM
         END IF
     END BLOCK
 
@@ -198,6 +213,7 @@ PROGRAM main
 
     IF (frechet_order == 1) THEN
         WRITE(*,'(A)') '[init] frechet_order=1: computing F(q0) cache'
+        CALL clear_endpoint_folder(error_status)
         CALL run_simulation(TRIM(COMMAND_RUN), error_status)
         IF (error_status /= 0) THEN
             CALL log_error(ERR_MAIN_EXT_CMD)
@@ -205,9 +221,27 @@ PROGRAM main
             STOP ERR_MAIN_EXT_CMD
         END IF
 
-        CALL read_flowfield(F_q0_rho, F_q0_p, F_q0_T, F_q0_U, F_q0_V, F_q0_W, &
-                            Xgrid, Ygrid, Zgrid, dc_tmp, error_status, &
-                            path_override=stability_time_dir(TSTEP_INITIAL_TIME + TTime))
+        BLOCK
+            CHARACTER(len=256) :: ep_cache
+            LOGICAL :: fq0_exists
+            CALL find_endpoint_folder(ep_cache, error_status)
+            IF (error_status /= 0) THEN
+                CALL cleanup_allocations()
+                STOP ERR_SETUP_INVALID_PARAM
+            END IF
+            INQUIRE(FILE=TRIM(ep_cache)//'p', EXIST=fq0_exists)
+            IF (.NOT. fq0_exists) THEN
+                CALL log_error(ERR_SETUP_INVALID_PARAM, &
+                    'F(q0) cache endpoint folder '//TRIM(ep_cache)//&
+                    ' has no p file. Check controlDict.')
+                CALL cleanup_allocations()
+                STOP ERR_SETUP_INVALID_PARAM
+            END IF
+
+            CALL read_flowfield(F_q0_rho, F_q0_p, F_q0_T, F_q0_U, F_q0_V, F_q0_W, &
+                                Xgrid, Ygrid, Zgrid, dc_tmp, error_status, &
+                                path_override=ep_cache)
+        END BLOCK
         IF (error_status /= 0) THEN
             CALL log_error(ERR_MAIN_READ_FLOW)
             CALL cleanup_allocations()
