@@ -18,7 +18,7 @@
 !                                  write_OF_scalars/vectors preserve the
 !                                  OpenFOAM ASCII header of a PRE-EXISTING
 !                                  target file and only rewrite the body.
-!   promote_to_initial_state(ierr) -- cp -af the four OpenFOAM fields from
+!   promote_to_initial_state(ierr) -- cp -pRf the four OpenFOAM fields from
 !                                  <stability_dir>/<1+TTime>/ back over
 !                                  <stability_dir>/1/. Used once after the
 !                                  CFD warmup pass to turn `1/` into
@@ -236,20 +236,21 @@ CONTAINS
             RETURN
         END IF
 
-        ! 2. Seed p, rho, T, U with the baseflow templates. `cp -a` preserves
-        !    permissions/timestamps; -f overwrites any stale files from a
-        !    previous TStep run so re-runs are deterministic.
-        cmd = 'cp -af ' // TRIM(baseflow_field) // 'p '    // &
-                          TRIM(baseflow_field) // 'rho '  // &
-                          TRIM(baseflow_field) // 'T '    // &
-                          TRIM(baseflow_field) // 'U '    // &
-                          TRIM(init_dir)
+        ! 2. Seed p, rho, T, U with the baseflow templates. -p preserves
+        !    permissions/timestamps, -R recurses (harmless on plain files),
+        !    -f overwrites stale files from a previous TStep run. Using
+        !    -pRf rather than GNU-only `-a` keeps this portable to BSD/macOS.
+        cmd = 'cp -pRf ' // TRIM(baseflow_field) // 'p '    // &
+                           TRIM(baseflow_field) // 'rho '  // &
+                           TRIM(baseflow_field) // 'T '    // &
+                           TRIM(baseflow_field) // 'U '    // &
+                           TRIM(init_dir)
         CALL EXECUTE_COMMAND_LINE(TRIM(cmd), wait=.TRUE., &
                                   exitstat=exitstat, cmdstat=cmdstat)
         IF (cmdstat /= 0 .OR. exitstat /= 0) THEN
             ierr = ERR_SETUP_FILE_OPEN
             CALL log_error(ERR_SETUP_FILE_OPEN, &
-                'cp -af failed: '//TRIM(baseflow_field)//'{p,rho,T,U} -> '//TRIM(init_dir))
+                'cp -pRf failed: '//TRIM(baseflow_field)//'{p,rho,T,U} -> '//TRIM(init_dir))
             RETURN
         END IF
 
@@ -277,8 +278,9 @@ CONTAINS
     !
     ! Copies the four OpenFOAM field files (p, rho, T, U) from
     ! <stability_dir>/<1+TTime>/ back over <stability_dir>/1/. Same shell
-    ! trick as seed_stability_initial: a single `cp -af` list so the headers
-    ! and numeric bodies arrive together.
+    ! trick as seed_stability_initial: a single `cp -pRf` list (POSIX, so
+    ! portable to BSD/macOS) so the headers and numeric bodies arrive
+    ! together.
     !
     ! Used once during init, right after the CFD warmup pass, so that `1/`
     ! holds q0 = F(q_raw) (the discretely-consistent base state) for the
@@ -295,17 +297,17 @@ CONTAINS
         CALL find_endpoint_folder(end_dir, ierr)
         IF (ierr /= 0) RETURN
 
-        cmd = 'cp -af ' // TRIM(end_dir) // 'p '    // &
-                          TRIM(end_dir) // 'rho '  // &
-                          TRIM(end_dir) // 'T '    // &
-                          TRIM(end_dir) // 'U '    // &
-                          TRIM(init_dir)
+        cmd = 'cp -pRf ' // TRIM(end_dir) // 'p '    // &
+                           TRIM(end_dir) // 'rho '  // &
+                           TRIM(end_dir) // 'T '    // &
+                           TRIM(end_dir) // 'U '    // &
+                           TRIM(init_dir)
         CALL EXECUTE_COMMAND_LINE(TRIM(cmd), wait=.TRUE., &
                                   exitstat=exitstat, cmdstat=cmdstat)
         IF (cmdstat /= 0 .OR. exitstat /= 0) THEN
             ierr = ERR_SETUP_FILE_OPEN
             CALL log_error(ERR_SETUP_FILE_OPEN, &
-                'cp -af failed: '//TRIM(end_dir)//'{p,rho,T,U} -> '//TRIM(init_dir))
+                'cp -pRf failed: '//TRIM(end_dir)//'{p,rho,T,U} -> '//TRIM(init_dir))
             RETURN
         END IF
 
@@ -353,12 +355,14 @@ CONTAINS
         INTEGER(ik), INTENT(OUT) :: ierr
         CHARACTER(len=1024) :: cmd
         ierr = 0
-        ! find <stab> -maxdepth 1 -type d -regex '<stab>/[0-9][0-9.]*' -not
-        ! -path '<stab>/1' -exec rm -rf {} +
+        ! POSIX-only `find` invocation (portable to BSD/macOS): no -regextype.
+        ! We select every direct subfolder that is NOT the initial-state seed
+        ! '1' or a structural OpenFOAM directory (constant, system, output).
+        ! Any remaining subfolder under <stab>/ is by construction a
+        ! solver-written time directory, so this is safe.
         cmd = 'find '//TRIM(stability_dir)//&
-              ' -maxdepth 1 -type d -regextype posix-extended'//&
-              ' -regex '''//TRIM(stability_dir)//'[0-9]+(\.[0-9]+)?'''//&
-              ' -not -path '''//TRIM(stability_dir)//'1'''//&
+              ' -mindepth 1 -maxdepth 1 -type d'//&
+              ' ! -name 1 ! -name constant ! -name system ! -name output'//&
               ' -exec rm -rf {} +'
         CALL EXECUTE_COMMAND_LINE(TRIM(cmd), wait=.TRUE.)
     END SUBROUTINE clear_endpoint_folder
@@ -375,8 +379,9 @@ CONTAINS
     ! caller can surface a clear error.
     !
     ! Implementation: shell pipeline writes the folder name to a tmp file,
-    ! Fortran reads it back. ls+awk+sort -g+tail -n1 gives us the largest
-    ! numeric folder name > '1/'.
+    ! Fortran reads it back. ls+awk+sort -n+tail -n1 gives us the largest
+    ! numeric folder name > '1/'. All tools are POSIX so the pipeline
+    ! runs unchanged on GNU/Linux and BSD/macOS.
     ! -------------------------------------------------------------------------
     SUBROUTINE find_endpoint_folder(path, ierr)
         CHARACTER(len=256), INTENT(OUT) :: path
@@ -393,10 +398,12 @@ CONTAINS
 
         ! List <stab>, keep numeric names != '1', sort by value, pick max.
         ! awk pattern: /^[0-9]/ matches numeric-starting names; $0 != "1"
-        ! excludes the initial-state folder.
+        ! excludes the initial-state folder. `sort -n` (POSIX) suffices:
+        ! OpenFOAM time folders are always fixed-point decimal, so we do
+        ! not need GNU's `-g` (general numeric / scientific-notation) mode.
         cmd = 'cd '//TRIM(stability_dir)//' && ls -1 2>/dev/null'//&
               ' | awk ''/^[0-9]/ && $0 != "1"'''//&
-              ' | sort -g | tail -n 1 > '//TRIM(tmpfile)
+              ' | sort -n | tail -n 1 > '//TRIM(tmpfile)
         CALL EXECUTE_COMMAND_LINE(TRIM(cmd), wait=.TRUE.)
 
         CALL get_unit(u)
