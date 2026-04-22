@@ -65,7 +65,8 @@ CONTAINS
                              frechet_order, &
                              eigenvalue_sort_by, &
                              TTime, &
-                             num_threads
+                             num_threads, &
+                             N_eig_write
 
         ! OpenFOAM-specific namelist (raw path inputs)
         NAMELIST / OpenFOAM / N_HEADER_grid, &
@@ -398,4 +399,4 @@ CONTAINS
         WRITE(str, '(I0)') val
     END FUNCTION INT_TO_STR
 
-END MODULE setup 
+END MODULE setup

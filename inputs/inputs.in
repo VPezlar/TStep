@@ -53,7 +53,7 @@
     eigenvalue_sort_by = 'imaginary',
     TTime              = 0.1,         ! integration time tau; endTime in controlDict must equal 1.0 + TTime
     num_threads        = 1,
-    num_eigenvectors_to_write = 10    # Number of leading eigenvectors to export to disk
+    N_eig_write        = 10,          ! Number of leading eigenvectors to export to disk
 /
 
 &OpenFOAM

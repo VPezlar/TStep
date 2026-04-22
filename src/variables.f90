@@ -67,10 +67,11 @@ MODULE variables
     CHARACTER(len=256) :: stability_dir    ! analysis/working case root ('/')
 
     ! --- &Arnoldi namelist: algorithm parameters ----------------------------
-    INTEGER(ik)       :: krylov_size
-    INTEGER(ik)       :: frechet_order
-    CHARACTER(len=20) :: eigenvalue_sort_by
-    REAL(rk)          :: TTime            ! integration time tau (Mathias eq. 8)
+    INTEGER(ik)       :: krylov_size         ! Krylov subspace size
+    INTEGER(ik)       :: frechet_order       ! Order of the frechet derivative
+    INTEGER(ik)       :: N_eig_write         ! Number of vectors to be outputted
+    CHARACTER(len=20) :: eigenvalue_sort_by  ! switch variable for sorting
+    REAL(rk)          :: TTime               ! integration time tau (Mathias eq. 8)
 
     ! --- &Arnoldi namelist: performance -------------------------------------
     INTEGER(ik)       :: num_threads      ! threads for BLAS/LAPACK (0 = auto)
