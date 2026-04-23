@@ -290,7 +290,7 @@ PROGRAM main
 
         IF (rel_eps > EPS_S_TOL) THEN
             WRITE(*,'(A)') ' *** FATAL: base flow is not steady enough. ***'
-            WRITE(*,'(A)') ' Converge it further (longer SIMPLE run) or'
+            WRITE(*,'(A)') ' Converge it further or'
             WRITE(*,'(A)') ' shorten TTime. Aborting before Arnoldi.'
             CALL log_error(ERR_SETUP_INVALID_PARAM, &
                            'Base flow drift exceeds tolerance')
