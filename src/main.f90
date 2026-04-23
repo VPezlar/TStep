@@ -255,6 +255,7 @@ PROGRAM main
             CALL pack_state(rho0, p0, T0, U0, V0, W0, q0_vec, error_status)
             norm_q0 = NORM2(q0_vec)
             eps_s = NORM2(F_q0_vec - q0_vec)
+            WRITE(*,*) 'TEST FOR NOISE STARTS HERE', norm_q0
             WRITE(*,'(A,ES12.4)') '[diag] ||q0||        = ', norm_q0
             WRITE(*,'(A,ES12.4)') '[diag] ||F(q0)-q0|| = ', eps_s
             WRITE(*,'(A,ES12.4)') '[diag] relative εₛ  = ', eps_s/norm_q0
