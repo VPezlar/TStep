@@ -16,70 +16,64 @@ $$A v \approx \frac{F(q_0 + \epsilon_0 v) - F(q_0)}{\epsilon_0}$$
 
 ## 3. Architecture & Data Flow
 
-```text
-=============================================================================
-                     TStep Architecture & Data Flow
-=============================================================================
-
-[1] INITIALIZATION & WARMUP (main.f90)
- |-- configurationRead()       -> Parses inputs/inputs.in
- |-- read_flowfield()          -> Loads raw SACRED data
- |-- run_simulation()          -> [CFD WARMUP] Digests raw data into steady state
- |-- promote_to_initial()      -> Extracts absolute base state (q0)
-
-[2] THE DIAGNOSTIC GATE (The Noise Floor)
- |-- run_simulation()          -> Computes F(q0)
- |-- pack_state()              -> Measures absolute solver drift (eps_s)
- |   |-- [FATAL CHECK]         -> IF (eps_s > TOL) ABORT (Base flow drifting)
- |   |-- [OPTIMIZATION]        -> IF (frechet_order == 1) Cache F(q0)
-
-[3] ARNOLDI ENGINE (Arnoldi.f90)
- |-- initial_disturbance()     -> Seeds random unit-norm v_1
- |-- DO j = 1, krylov_size
- |    |-- apply_linearized_operator() -> Approximates A*v via Frechet Stencil
- |    |    |-- [CFD RUN]       -> Computes F(q_i) for active stencil nodes
- |    |    |-- [CACHE HIT]     -> Bypasses CFD for alpha=0 if order=1
- |    |-- Modified Gram-Schmidt
- |    |-- Reorthogonalization pass
- |-- LAPACK DGEEV              -> Solves eigensystem of Hessenberg matrix H_m
- |-- Ritz Extraction           -> Lifts eigenvectors back to full fluid domain
-
-[4] OUTPUT (write_eigendata.f90)
- |-- write_eigen_files()       -> Generates eigenvalues.dat, eigenvectors.dat
-=============================================================================
-```
+    =============================================================================
+                         TStep Architecture & Data Flow
+    =============================================================================
+    
+    [1] INITIALIZATION & WARMUP (main.f90)
+     |-- configurationRead()       -> Parses inputs/inputs.in
+     |-- read_flowfield()          -> Loads raw SACRED data
+     |-- run_simulation()          -> [CFD WARMUP] Digests raw data into steady state
+     |-- promote_to_initial()      -> Extracts absolute base state (q0)
+    
+    [2] THE DIAGNOSTIC GATE (The Noise Floor)
+     |-- run_simulation()          -> Computes F(q0)
+     |-- pack_state()              -> Measures absolute solver drift (eps_s)
+     |   |-- [FATAL CHECK]         -> IF (eps_s > TOL) ABORT (Base flow drifting)
+     |   |-- [OPTIMIZATION]        -> IF (frechet_order == 1) Cache F(q0)
+    
+    [3] ARNOLDI ENGINE (Arnoldi.f90)
+     |-- initial_disturbance()     -> Seeds random unit-norm v_1
+     |-- DO j = 1, krylov_size
+     |    |-- apply_linearized_operator() -> Approximates A*v via Frechet Stencil
+     |    |    |-- [CFD RUN]       -> Computes F(q_i) for active stencil nodes
+     |    |    |-- [CACHE HIT]     -> Bypasses CFD for alpha=0 if order=1
+     |    |-- Modified Gram-Schmidt
+     |    |-- Reorthogonalization pass
+     |-- LAPACK DGEEV              -> Solves eigensystem of Hessenberg matrix H_m
+     |-- Ritz Extraction           -> Lifts eigenvectors back to full fluid domain
+    
+    [4] OUTPUT (write_eigendata.f90)
+     |-- write_eigen_files()       -> Generates eigenvalues.dat, eigenvectors.dat
+    =============================================================================
 
 ## 4. Directory Structure & Module Hierarchy
 
-```text
-TStep/
-├── bin/              # Build artifacts, Makefile, and executable
-├── docs/             # Operational guides (OpenBLAS, Integration)
-├── inputs/           # Configuration files (inputs.in)
-├── output/           # Output CSV and eigenvalue files
-├── src/              # Core Fortran 90 source code
-└── tests/            # Unit tests
-```
+    TStep/
+    ├── bin/              # Build artifacts, Makefile, and executable
+    ├── docs/             # Operational guides (OpenBLAS, Integration)
+    ├── inputs/           # Configuration files (inputs.in)
+    ├── output/           # Output CSV and eigenvalue files
+    ├── src/              # Core Fortran 90 source code
+    └── tests/            # Unit tests
 
 ### Module Dependencies & Compilation Order
 The core engine is built on a strict dependency tree to ensure memory safety and compilation integrity:
 
-```text
-main.f90
-  ├─ accuracy
-  ├─ error_handling
-  ├─ setup
-  ├─ call_CFD
-  ├─ random_disturbance
-  ├─ read_flow
-  │   └─ OpenFOAM_IO
-  ├─ write_flow
-  │   └─ OpenFOAM_IO
-  ├─ write_output
-  ├─ frechet_stencil
-  └─ Arnoldi
-      └─ state_vector
-```
+    main.f90
+      ├─ accuracy
+      ├─ error_handling
+      ├─ setup
+      ├─ call_CFD
+      ├─ random_disturbance
+      ├─ read_flow
+      │   └─ OpenFOAM_IO
+      ├─ write_flow
+      │   └─ OpenFOAM_IO
+      ├─ write_output
+      ├─ frechet_stencil
+      └─ Arnoldi
+          └─ state_vector
 
 ### Detailed Module Specifications
 
@@ -97,7 +91,7 @@ Executes external command and monitors exit status.
 * **Error States:** `1` (Launch failed), `2` (Non-zero exit code from solver).
 
 **`random_disturbance.f90` (State Seeding)**
-Generates normalized, uniform random perturbation vectors scaled strictly by `eps_0` for sensitivity analysis and Krylov initialization.
+Generates normalized, uniform random perturbation vectors scaled strictly by $\epsilon_0$ for sensitivity analysis and Krylov initialization.
 
 **`OpenFOAM_IO.f90` (Native Format Interface)**
 Low-level read/write handling for OpenFOAM scalar (`p`, `rho`, `T`) and vector (`U`, `C`) fields. Preserves native headers during write operations.
@@ -106,38 +100,36 @@ Low-level read/write handling for OpenFOAM scalar (`p`, `rho`, `T`) and vector (
 Flattens 3D spatial domains into contiguous 1D arrays for LAPACK matrix operations, and unpacks the modified state back into physical dimensions for the CFD solver.
 
 **`error_handling.f90` (System Diagnostics)**
-Centralized hierarchical logging. No module writes directly to `stdout` for errors; all pass through `log_error(code, context)`.
+Centralized hierarchical logging. No module writes directly to standard output for errors; all pass through `log_error(code, context)`.
 
 ## 5. Configuration (`inputs.in`)
 
 The engine is driven exclusively by namelists located in `inputs/inputs.in`.
 
-```fortran
-! General Settings (solver-agnostic)
-&General
-    flow_format = 'OpenFOAM',     
-    output_file = '../output/flowfield.csv',
-    COMMAND_RUN = 'cd /path/to/case && rhoCentralFoam',
-/
-
-! Arnoldi & Fréchet Parameters
-&Arnoldi
-    krylov_size        = 50,
-    frechet_order      = 1,
-    eps_0              = 1.0d-6,
-    TTime              = 1.0,
-    eigenvalue_sort_by = 'magnitude',
-/
-
-! OpenFOAM-Specific Pointers
-&OpenFOAM
-    N_HEADER_grid = 21,
-    N_HEADER_var  = 21,
-    file_grid_in  = '/path/to/openfoam/case/0/C',
-    file_var_in   = '/path/to/openfoam/case/timestep/',
-    file_var_out  = '/path/to/openfoam/case/output_timestep/',
-/
-```
+    ! General Settings (solver-agnostic)
+    &General
+        flow_format = 'OpenFOAM',     
+        output_file = '../output/flowfield.csv',
+        COMMAND_RUN = 'cd /path/to/case && rhoCentralFoam',
+    /
+    
+    ! Arnoldi & Fréchet Parameters
+    &Arnoldi
+        krylov_size        = 50,
+        frechet_order      = 1,
+        eps_0              = 1.0d-6,
+        TTime              = 1.0,
+        eigenvalue_sort_by = 'magnitude',
+    /
+    
+    ! OpenFOAM-Specific Pointers
+    &OpenFOAM
+        N_HEADER_grid = 21,
+        N_HEADER_var  = 21,
+        file_grid_in  = '/path/to/openfoam/case/0/C',
+        file_var_in   = '/path/to/openfoam/case/timestep/',
+        file_var_out  = '/path/to/openfoam/case/output_timestep/',
+    /
 
 ### Parameter Dictionary
 * `flow_format`: Target solver architecture.
@@ -152,15 +144,14 @@ The engine is driven exclusively by namelists located in `inputs/inputs.in`.
 
 ### Native OpenFOAM Support
 TStep expects standard OpenFOAM dictionary formatting for vectors and scalars:
-```text
-<header lines>
-N
-(
-value1
-value2
-...
-)
-```
+
+    <header lines>
+    N
+    (
+    value1
+    value2
+    ...
+    )
 
 ### Adding a New Solver
 The architecture is designed to integrate with external solvers without modifying the core Arnoldi logic. To add a new solver (e.g., SU2, CGNS):
@@ -179,28 +170,25 @@ The architecture is designed to integrate with external solvers without modifyin
 
 **Compilation:**
 Via standard Make utility:
-```bash
-cd bin
-make clean
-make
-```
+
+    cd bin
+    make clean
+    make
 
 Manual Compilation Mapping:
-```bash
-gfortran -c src/accuracy.f90 -o obj/accuracy.o -J mod/
-gfortran -c src/error_handling.f90 -o obj/error_handling.o -J mod/
-# ... [Compile dependencies in order] ...
-gfortran obj/*.o -o bin/tstep -llapack -lblas
-```
+
+    gfortran -c src/accuracy.f90 -o obj/accuracy.o -J mod/
+    gfortran -c src/error_handling.f90 -o obj/error_handling.o -J mod/
+    # ... [Compile dependencies in order] ...
+    gfortran obj/*.o -o bin/tstep -llapack -lblas
 
 **Execution:**
-```bash
-./tstep
-```
+
+    ./tstep
 
 ## 8. Hierarchical Error Handling
 
-The system utilizes strict numeric exit codes. `ERROR_CODE = MODULE_ID × 100 + SPECIFIC_ERROR`.
+The system utilizes strict numeric exit codes. `ERROR_CODE = MODULE_ID * 100 + SPECIFIC_ERROR`.
 
 | Range     | Originating Module        | Target Failure States                                  |
 |-----------|---------------------------|--------------------------------------------------------|
@@ -224,7 +212,7 @@ The system utilizes strict numeric exit codes. `ERROR_CODE = MODULE_ID × 100 + 
 ### Hard Numerical Constraints: The Noise Floor Gate
 Before initiating the Arnoldi loop, `main.f90` forces an absolute evaluation of the CFD discretization error.
 
-If $||F(q_0) - q_0|| / ||q_0|| > \text{EPS\_S\_TOL}$:
+If the relative drift $||F(q_0) - q_0|| / ||q_0||$ exceeds the configuration threshold `EPS_S_TOL`:
 * **Result:** FATAL ABORT. 
 * **Cause:** The base state is numerically drifting. It is an active transient.
 * **Resolution:** You cannot linearize a moving target. Extend your external base-flow solver execution until the residuals drop below the defined precision floor.
