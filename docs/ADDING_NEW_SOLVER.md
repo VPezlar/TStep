@@ -1,177 +1,77 @@
-# Adding a New Solver to TStep
+# SYSTEM DIRECTIVE: TStep Engine - SU2 Abstraction Implementation
 
-This guide demonstrates how to add support for a new CFD solver to TStep. We'll use SU2 as an example.
+## MISSION OBJECTIVE
+You are an expert Fortran 90 software architect. Your objective is to expand the `TStep` global stability analysis framework. Currently, the I/O and state-management layers are tightly coupled to OpenFOAM idiosyncrasies. You will implement support for the `SU2` CFD solver. 
 
-## Step 1: Add Solver-Specific Variables
+## STRICT ARCHITECTURAL CONSTRAINTS
+1. **Mathematical Purity:** You will NOT modify `Arnoldi.f90` or `state_vector.f90`. The mathematical core operates strictly on 1D vectors of primitive variables ($\rho, p, T, U, V, W$). It must remain completely blind to the external solver.
+2. **The Border Wall:** SU2 operates on conservative variables ($\rho, \rho U, \rho V, \rho W, \rho E$). The translation between SU2's conservative variables and TStep's primitive variables MUST happen exclusively inside a newly created `SU2_IO.f90` module.
+3. **No Dynamic Folders:** OpenFOAM creates dynamic time-step folders (e.g., `1.09999/`). SU2 overwrites static files (e.g., `restart_flow.dat`). You must abstract the directory hunting logic.
 
-Edit `src/variables.f90` to add variables specific to the new solver:
+Execute the following four phases precisely.
 
-```fortran
-MODULE variables
-    USE accuracy
-    IMPLICIT NONE
+---
 
-    ! General variables
-    INTEGER(ik) :: N_HEADER_grid, N_HEADER_var
-    CHARACTER(len=256) :: file_grid_in, file_var_in, file_var_out
-    CHARACTER(len=256) :: output_file, flow_format, COMMAND_RUN
-    REAL(rk) :: dist_mag
+### PHASE 1: Configuration Expansion
+Modify the configuration definitions to accept SU2 parameters.
 
-    ! OpenFOAM-specific variables
-    ! (existing OpenFOAM variables)
+**Target 1: `variables.f90`**
+* Add the following string variables to hold the SU2 paths: `su2_config_file`, `su2_restart_in`, `su2_solution_out`.
+* Add thermodynamic constants required for state translation: `gamma_gas` (default 1.4) and `R_gas` (default 287.05).
 
-    ! SU2-specific variables
-    CHARACTER(len=256) :: su2_config_file, su2_mesh_file
-    CHARACTER(len=256) :: su2_solution_file
-    INTEGER(ik) :: su2_restart_iter
+**Target 2: `setup.f90`**
+* Inside `configurationRead()`, define a new namelist `&SU2` containing the variables above.
+* Add an `ELSE IF (TRIM(flow_format) == 'SU2')` block to read the `&SU2` namelist from the `inputs.in` file.
 
-END MODULE variables
-```
+---
 
-## Step 2: Create Configuration Namelist
+### PHASE 2: Structural Abstraction (The Gates)
+Bypass the OpenFOAM directory hunting for static solvers.
 
-Edit `src/setup.f90` to add a new namelist for the solver:
+**Target 1: `setup.f90` -> `find_endpoint_folder`**
+* Gate the existing POSIX shell pipeline (`ls | awk | sort | tail`) inside an `IF (TRIM(flow_format) == 'OpenFOAM')` block.
+* Add an `ELSE IF (TRIM(flow_format) == 'SU2')` block. For SU2, there is no folder to hunt. Assign the path string directly to the predefined `su2_solution_out` directory.
 
-```fortran
-SUBROUTINE configurationRead(ierr)
-    ! ... existing code ...
+**Target 2: `setup.f90` -> `clear_endpoint_folder`**
+* Gate the existing `rm -rf` logic inside the OpenFOAM block.
+* For SU2, execute a command to delete the existing static endpoint file (e.g., `rm -f <su2_solution_out>/restart_flow.dat`) to guarantee a clean slate before the solver runs.
 
-    ! SU2-specific namelist
-    NAMELIST / SU2 / su2_config_file, &
-                     su2_mesh_file, &
-                     su2_solution_file, &
-                     su2_restart_iter
+---
 
-    ! ... existing file opening code ...
+### PHASE 3: The Translation Border (SU2_IO.f90)
+Create a new module named `SU2_IO.f90` from scratch. This module serves as the firewall. It reads conservative data, translates it to primitive data for TStep, and translates primitive data back to conservative data for the solver.
 
-    ! Read General namelist
-    READ(unit_num, nml=General, iostat=status_id, iomsg=message)
-    ! ... error handling ...
+**Target 1: `read_SU2_solution` subroutine**
+* **Input:** File path.
+* **Output:** `rho`, `p`, `T`, `U`, `V`, `W` arrays (primitive variables).
+* **Logic:**
+  1. Parse the SU2 output file (CSV or DAT).
+  2. Read the conservative columns: Density ($\rho$), Momentum ($\rho U, \rho V, \rho W$), and Energy ($\rho E$).
+  3. Execute the translation to primitive:
+     * Velocity: $U = (\rho U)/\rho$ (same for V, W)
+     * Pressure: $p = (\gamma_{gas} - 1) \cdot [\rho E - 0.5 \cdot \rho(U^2 + V^2 + W^2)]$
+     * Temperature: $T = p / (\rho \cdot R_{gas})$
 
-    ! Read solver-specific namelist
-    IF (TRIM(flow_format) == 'OpenFOAM') THEN
-        READ(unit_num, nml=OpenFOAM, iostat=status_id, iomsg=message)
-        ! ... error handling ...
-    ELSE IF (TRIM(flow_format) == 'SU2') THEN
-        READ(unit_num, nml=SU2, iostat=status_id, iomsg=message)
-        IF (status_id /= 0) THEN
-            ierr = ERR_SETUP_NAMELIST_READ
-            CALL log_error(ERR_SETUP_NAMELIST_READ, 'SU2 namelist - '//TRIM(message))
-            CLOSE(unit_num)
-            RETURN
-        END IF
-    ELSE
-        ! Unsupported format
-        ierr = ERR_SETUP_INVALID_PARAM
-        CALL log_error(ERR_SETUP_INVALID_PARAM, 'Unsupported flow_format: '//TRIM(flow_format))
-        CLOSE(unit_num)
-        RETURN
-    END IF
+**Target 2: `write_SU2_restart` subroutine**
+* **Input:** File path, primitive arrays (`rho`, `p`, `T`, `U`, `V`, `W`).
+* **Logic:**
+  1. Translate primitive back to conservative:
+     * Momentum: $(\rho U) = \rho \cdot U$
+     * Energy: $\rho E = \frac{p}{\gamma_{gas} - 1} + 0.5 \cdot \rho(U^2 + V^2 + W^2)$
+  2. Write the arrays out in the exact formatting required by an SU2 restart file. (Preserve the native SU2 headers).
 
-    CLOSE(unit_num)
-END SUBROUTINE configurationRead
-```
+---
 
-## Step 3: Update Configuration File
+### PHASE 4: The Dispatchers
+Route the high-level commands through your new abstraction layer.
 
-Add a new section to `inputs/inputs.in`:
+**Target 1: `read_flow.f90`**
+* Inside `read_flowfield`, add an `ELSE IF (TRIM(flow_format) == 'SU2')` block.
+* Call `read_SU2_solution(...)` from `SU2_IO` to populate the `rho_in, p_in, T_in, U_in, V_in, W_in` arrays.
 
-```fortran
-! General Settings (solver-agnostic)
-&General
-    flow_format = 'SU2',
-    output_file = '../output/flowfield.csv',
-    dist_mag    = 1.0d-6,
-    COMMAND_RUN = 'cd /path/to/case && SU2_CFD config.cfg',
-/
+**Target 2: `write_flow.f90`**
+* Inside `write_flowfield`, add the SU2 gate.
+* Call `write_SU2_restart(...)` to dump the perturbed state back to the disk.
 
-! SU2-Specific Settings
-&SU2
-    su2_config_file   = '/path/to/su2/config.cfg',
-    su2_mesh_file     = '/path/to/su2/mesh.su2',
-    su2_solution_file = '/path/to/su2/solution.dat',
-    su2_restart_iter  = 1000,
-/
-```
-
-## Step 4: Create I/O Module
-
-Create `src/SU2_IO.f90`:
-
-```fortran
-MODULE SU2_IO
-    USE accuracy
-    USE variables
-    USE setup, ONLY: get_unit
-    USE error_handling
-
-    IMPLICIT NONE
-
-CONTAINS
-
-    SUBROUTINE read_SU2_scalars(filename, data_vector, n_data_points, ierr)
-        CHARACTER(len=*), INTENT(in) :: filename
-        REAL(rk), DIMENSION(:), ALLOCATABLE, INTENT(out) :: data_vector
-        INTEGER(ik), INTENT(out) :: n_data_points
-        INTEGER(ik), INTENT(out) :: ierr
-
-        ! Implementation for reading SU2 scalar data
-        ! ...
-    END SUBROUTINE read_SU2_scalars
-
-    SUBROUTINE read_SU2_vectors(filename, x_vector, y_vector, z_vector, n_data_points, ierr)
-        CHARACTER(len=*), INTENT(in) :: filename
-        REAL(rk), DIMENSION(:), ALLOCATABLE, INTENT(out) :: x_vector, y_vector, z_vector
-        INTEGER(ik), INTENT(out) :: n_data_points
-        INTEGER(ik), INTENT(out) :: ierr
-
-        ! Implementation for reading SU2 vector data
-        ! ...
-    END SUBROUTINE read_SU2_vectors
-
-END MODULE SU2_IO
-```
-
-## Step 5: Update Read/Write Modules
-
-Edit `src/read_flow.f90`:
-
-```fortran
-SUBROUTINE read_flowfield(rho_in, p_in, T_in, U_in, V_in, W_in, &
-                          Xgrid, Ygrid, Zgrid, data_count, error_status)
-    ! ... existing declarations ...
-
-    IF (flow_format == 'OpenFOAM') THEN
-        ! Existing OpenFOAM read logic
-        ! ...
-    ELSE IF (flow_format == 'SU2') THEN
-        ! SU2 read logic
-        CALL read_SU2_scalars(TRIM(su2_solution_file)//'_p', p_in, data_count, error_status)
-        ! ... more SU2 reads ...
-    END IF
-
-END SUBROUTINE read_flowfield
-```
-
-Similarly, update `src/write_flow.f90` for SU2 output.
-
-## Step 6: Update Compilation
-
-Add the new module to your compilation script:
-
-```bash
-gfortran -c src/SU2_IO.f90 -o obj/SU2_IO.o -J mod/
-```
-
-## Summary
-
-The modular architecture makes adding new solvers straightforward:
-
-1. ✅ Solver-specific variables → `variables.f90`
-2. ✅ Configuration namelist → `setup.f90`
-3. ✅ Configuration section → `inputs/inputs.in`
-4. ✅ I/O routines → `SU2_IO.f90` (new file)
-5. ✅ Flow read/write logic → `read_flow.f90` and `write_flow.f90`
-6. ✅ Compilation → add to build process
-
-The `&General` namelist remains unchanged, keeping the configuration clean and maintainable!
+## EXECUTION ORDER
+Provide the complete Fortran 90 code modifications for **Phase 1 and Phase 2** first. Wait for my confirmation before proceeding to write the `SU2_IO.f90` module in Phase 3.
