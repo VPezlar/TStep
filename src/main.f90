@@ -211,53 +211,96 @@ PROGRAM main
     F_q0_vec = 0.0_rk
     has_F_q0 = .FALSE.
 
-    IF (frechet_order == 1) THEN
-        WRITE(*,'(A)') '[init] frechet_order=1: computing F(q0) cache'
-        CALL clear_endpoint_folder(error_status)
-        CALL run_simulation(TRIM(COMMAND_RUN), error_status)
-        IF (error_status /= 0) THEN
-            CALL log_error(ERR_MAIN_EXT_CMD)
-            CALL cleanup_allocations()
-            STOP ERR_MAIN_EXT_CMD
-        END IF
-
-        BLOCK
-            CHARACTER(len=256) :: ep_cache
-            LOGICAL :: fq0_exists
-            CALL find_endpoint_folder(ep_cache, error_status)
-            IF (error_status /= 0) THEN
-                CALL cleanup_allocations()
-                STOP ERR_SETUP_INVALID_PARAM
-            END IF
-            INQUIRE(FILE=TRIM(ep_cache)//'p', EXIST=fq0_exists)
-            IF (.NOT. fq0_exists) THEN
-                CALL log_error(ERR_SETUP_INVALID_PARAM, &
-                    'F(q0) cache endpoint folder '//TRIM(ep_cache)//&
-                    ' has no p file. Check controlDict.')
-                CALL cleanup_allocations()
-                STOP ERR_SETUP_INVALID_PARAM
-            END IF
-
-            CALL read_flowfield(F_q0_rho, F_q0_p, F_q0_T, F_q0_U, F_q0_V, F_q0_W, &
-                                Xgrid, Ygrid, Zgrid, dc_tmp, error_status, &
-                                path_override=ep_cache)
-        END BLOCK
-        IF (error_status /= 0) THEN
-            CALL log_error(ERR_MAIN_READ_FLOW)
-            CALL cleanup_allocations()
-            STOP ERR_MAIN_READ_FLOW
-        END IF
-
-        CALL pack_state(F_q0_rho, F_q0_p, F_q0_T, F_q0_U, F_q0_V, F_q0_W, &
-                        F_q0_vec, error_status)
-        IF (error_status /= 0) THEN
-            CALL log_error(ERR_MAIN_DISTURBANCE, 'pack_state on F(q0) failed')
-            CALL cleanup_allocations()
-            STOP ERR_MAIN_DISTURBANCE
-        END IF
-        has_F_q0 = .TRUE.
-
+    ! --- 9. Compute F(q0) to (a) measure solver noise floor eps_s and (b) cache
+    !        for the alpha=0 stencil node when frechet_order == 1. This runs
+    !        unconditionally so eps_s is reported on every TStep invocation. ---
+    WRITE(*,'(A)') '[init] Computing F(q0) -- measures eps_s and caches (if order=1)'
+    CALL clear_endpoint_folder(error_status)
+    CALL run_simulation(TRIM(COMMAND_RUN), error_status)
+    IF (error_status /= 0) THEN
+        CALL log_error(ERR_MAIN_EXT_CMD)
+        CALL cleanup_allocations()
+        STOP ERR_MAIN_EXT_CMD
     END IF
+
+    BLOCK
+        CHARACTER(len=256) :: ep_cache
+        LOGICAL :: fq0_exists
+        CALL find_endpoint_folder(ep_cache, error_status)
+        IF (error_status /= 0) THEN
+            CALL cleanup_allocations()
+            STOP ERR_SETUP_INVALID_PARAM
+        END IF
+        INQUIRE(FILE=TRIM(ep_cache)//'p', EXIST=fq0_exists)
+        IF (.NOT. fq0_exists) THEN
+            CALL log_error(ERR_SETUP_INVALID_PARAM, &
+                'F(q0) endpoint folder '//TRIM(ep_cache)//&
+                ' has no p file. Check controlDict.')
+            CALL cleanup_allocations()
+            STOP ERR_SETUP_INVALID_PARAM
+        END IF
+
+        CALL read_flowfield(F_q0_rho, F_q0_p, F_q0_T, F_q0_U, F_q0_V, F_q0_W, &
+                            Xgrid, Ygrid, Zgrid, dc_tmp, error_status, &
+                            path_override=ep_cache)
+    END BLOCK
+    IF (error_status /= 0) THEN
+        CALL log_error(ERR_MAIN_READ_FLOW)
+        CALL cleanup_allocations()
+        STOP ERR_MAIN_READ_FLOW
+    END IF
+
+    CALL pack_state(F_q0_rho, F_q0_p, F_q0_T, F_q0_U, F_q0_V, F_q0_W, &
+                    F_q0_vec, error_status)
+    IF (error_status /= 0) THEN
+        CALL log_error(ERR_MAIN_DISTURBANCE, 'pack_state on F(q0) failed')
+        CALL cleanup_allocations()
+        STOP ERR_MAIN_DISTURBANCE
+    END IF
+
+    ! Only order=1 actually needs the cache reused inside the matvec loop.
+    ! For order >= 2, we still measured eps_s above; just drop the cache flag.
+    has_F_q0 = (frechet_order == 1)
+
+    ! =========================================================================
+    ! SOLVER NOISE FLOOR (eps_s) DIAGNOSTIC + HARD GATE
+    ! =========================================================================
+    ! Measure how far F(q0) has drifted from q0. For a truly steady base flow
+    ! this should be at the level of file-I/O round-off (~1e-7 or smaller).
+    ! If it's significantly larger, the base flow is not converged and any
+    ! eigenvalues that follow are meaningless -- abort cleanly with guidance.
+    BLOCK
+        REAL(rk) :: eps_s, norm_q0, rel_eps
+        REAL(rk), ALLOCATABLE :: q0_vec(:)
+        INTEGER(ik) :: pack_err
+        REAL(rk), PARAMETER :: EPS_S_TOL = 1.0E-5_rk
+
+        ALLOCATE(q0_vec(vlen))
+        CALL pack_state(rho0, p0, T0, U0, V0, W0, q0_vec, pack_err)
+        norm_q0 = NORM2(q0_vec)
+        eps_s   = NORM2(F_q0_vec - q0_vec)
+        rel_eps = eps_s / norm_q0
+
+        WRITE(*,'(A)')        ' ====== SOLVER NOISE FLOOR ======'
+        WRITE(*,'(A,ES12.4)') '  ||q0||           = ', norm_q0
+        WRITE(*,'(A,ES12.4)') '  ||F(q0) - q0||   = ', eps_s
+        WRITE(*,'(A,ES12.4)') '  relative eps_s   = ', rel_eps
+        WRITE(*,'(A,ES12.4)') '  tolerance        = ', EPS_S_TOL
+        WRITE(*,'(A)')        ' ================================'
+
+        IF (rel_eps > EPS_S_TOL) THEN
+            WRITE(*,'(A)') ' *** FATAL: base flow is not steady enough. ***'
+            WRITE(*,'(A)') ' Converge it further (longer SIMPLE run) or'
+            WRITE(*,'(A)') ' shorten TTime. Aborting before Arnoldi.'
+            CALL log_error(ERR_SETUP_INVALID_PARAM, &
+                           'Base flow drift exceeds tolerance')
+            DEALLOCATE(q0_vec)
+            CALL cleanup_allocations()
+            STOP ERR_SETUP_INVALID_PARAM
+        END IF
+
+        DEALLOCATE(q0_vec)
+    END BLOCK
 
     ! --- 10. Initial Krylov vector v_1 (random unit-norm, scaled by eps_0) --
     CALL initial_disturbance(vlen, eps_0, v1, error_status)
