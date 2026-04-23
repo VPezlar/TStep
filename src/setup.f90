@@ -67,7 +67,8 @@ CONTAINS
                              eigenvalue_sort_by, &
                              TTime, &
                              num_threads, &
-                             N_eig_write
+                             N_eig_write, &
+                             EPS_S_TOL
 
         ! OpenFOAM-specific namelist (raw path inputs)
         NAMELIST / OpenFOAM / N_HEADER_grid, &

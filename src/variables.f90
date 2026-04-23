@@ -72,6 +72,7 @@ MODULE variables
     INTEGER(ik)       :: N_eig_write         ! Number of vectors to be outputted
     CHARACTER(len=20) :: eigenvalue_sort_by  ! switch variable for sorting
     REAL(rk)          :: TTime               ! integration time tau (Mathias eq. 8)
+    REAL(rk)          :: EPS_S_TOL           ! integration time tau (Mathias eq. 8)
 
     ! --- &Arnoldi namelist: performance -------------------------------------
     INTEGER(ik)       :: num_threads      ! threads for BLAS/LAPACK (0 = auto)

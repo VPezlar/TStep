@@ -59,6 +59,7 @@
     TTime              = 0.1,         ! integration time tau; endTime in controlDict must equal 1.0 + TTime
     num_threads        = 1,
     N_eig_write        = 5,           ! Number of leading eigenvectors to export to disk
+    EPS_S_TOL          = 10.0d-3,     ! Initial noise limit
 /
 
 &OpenFOAM

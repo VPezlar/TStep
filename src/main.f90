@@ -273,7 +273,7 @@ PROGRAM main
         REAL(rk) :: eps_s, norm_q0, rel_eps
         REAL(rk), ALLOCATABLE :: q0_vec(:)
         INTEGER(ik) :: pack_err
-        REAL(rk), PARAMETER :: EPS_S_TOL = 1.0E-5_rk
+        !REAL(rk), PARAMETER :: EPS_S_TOL = 1.0E-5_rk
 
         ALLOCATE(q0_vec(vlen))
         CALL pack_state(rho0, p0, T0, U0, V0, W0, q0_vec, pack_err)
