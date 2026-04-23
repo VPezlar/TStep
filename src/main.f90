@@ -248,6 +248,15 @@ PROGRAM main
             STOP ERR_MAIN_READ_FLOW
         END IF
 
+        CALL pack_state(F_q0_rho, F_q0_p, F_q0_T, F_q0_U, F_q0_V, F_q0_W, &
+                        F_q0_vec, error_status)
+        IF (error_status /= 0) THEN
+            CALL log_error(ERR_MAIN_DISTURBANCE, 'pack_state on F(q0) failed')
+            CALL cleanup_allocations()
+            STOP ERR_MAIN_DISTURBANCE
+        END IF
+        has_F_q0 = .TRUE.
+
         BLOCK
             REAL(rk) :: eps_s, norm_q0
             REAL(rk), ALLOCATABLE :: q0_vec(:)
@@ -263,14 +272,6 @@ PROGRAM main
 
         END BLOCK
 
-        CALL pack_state(F_q0_rho, F_q0_p, F_q0_T, F_q0_U, F_q0_V, F_q0_W, &
-                        F_q0_vec, error_status)
-        IF (error_status /= 0) THEN
-            CALL log_error(ERR_MAIN_DISTURBANCE, 'pack_state on F(q0) failed')
-            CALL cleanup_allocations()
-            STOP ERR_MAIN_DISTURBANCE
-        END IF
-        has_F_q0 = .TRUE.
     END IF
 
     ! --- 10. Initial Krylov vector v_1 (random unit-norm, scaled by eps_0) --
