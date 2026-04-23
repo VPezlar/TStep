@@ -117,7 +117,7 @@ PROGRAM main
         STOP ERR_MAIN_CONFIG
     END IF
 
-    ! --- 3. Read raw baseflow from the SACRED archive ---
+    ! --- 3. Read raw baseflow from the SACRED archive ---x
     CALL read_flowfield(rho_raw, p_raw, T_raw, U_raw, V_raw, W_raw, &
                         Xgrid, Ygrid, Zgrid, Nmesh, error_status)
     IF (error_status /= 0) THEN
@@ -247,6 +247,20 @@ PROGRAM main
             CALL cleanup_allocations()
             STOP ERR_MAIN_READ_FLOW
         END IF
+
+        BLOCK
+            REAL(rk) :: eps_s, norm_q0
+            REAL(rk), ALLOCATABLE :: q0_vec(:)
+            ALLOCATE(q0_vec(vlen))
+            CALL pack_state(rho0, p0, T0, U0, V0, W0, q0_vec, error_status)
+            norm_q0 = NORM2(q0_vec)
+            eps_s = NORM2(F_q0_vec - q0_vec)
+            WRITE(*,'(A,ES12.4)') '[diag] ||q0||        = ', norm_q0
+            WRITE(*,'(A,ES12.4)') '[diag] ||F(q0)-q0|| = ', eps_s
+            WRITE(*,'(A,ES12.4)') '[diag] relative εₛ  = ', eps_s/norm_q0
+            DEALLOCATE(q0_vec)
+
+        END BLOCK
 
         CALL pack_state(F_q0_rho, F_q0_p, F_q0_T, F_q0_U, F_q0_V, F_q0_W, &
                         F_q0_vec, error_status)
