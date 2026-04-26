@@ -395,7 +395,7 @@ CONTAINS
         ierr        = 0
         path        = ''
         folder_name = ''
-        tmpfile     = '/tmp/tstep_endpoint.txt'
+        tmpfile     = TRIM(stability_dir)//'tstep_endpoint.txt'
 
         ! List <stab>, keep numeric names != '1', sort by value, pick max.
         ! awk pattern: /^[0-9]/ matches numeric-starting names; $0 != "1"

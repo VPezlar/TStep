@@ -191,6 +191,20 @@ PROGRAM main
         STOP ERR_MAIN_READ_FLOW
     END IF
 
+    BLOCK
+        REAL(rk) :: R_measured
+
+        R_measured = SUM(p0 / (rho0 * T0)) / REAL(Nmesh, rk)
+
+        WRITE(*,'(A)')        ' ===== R_gas sanity check ====='
+        WRITE(*,'(A,ES12.4)') '  measured R_gas  = ', R_measured
+        WRITE(*,'(A)')        ' =============================='
+
+        IF (R_diff > 0.01_rk) THEN
+            WRITE(*,'(A)') ' The linearization will use the per-cell ratios from p0/(rho0*T0).'
+        END IF
+    END BLOCK
+
     ! --- 8. Dump q0 to <stability_dir>/flowfield.csv for inspection ---
     CALL write_flowfield_data(Xgrid, Ygrid, Zgrid, rho0, p0, T0, &
                               U0, V0, W0, Nmesh, error_status)
@@ -303,7 +317,7 @@ PROGRAM main
     END BLOCK
 
     ! --- 10. Initial Krylov vector v_1 (random unit-norm, scaled by eps_0) --
-    CALL initial_disturbance(vlen, eps_0, v1, error_status)
+    CALL initial_disturbance(Nmesh, eps_0, rho0, p0, T0, v1, error_status)
     IF (error_status /= 0) THEN
         CALL log_error(ERR_MAIN_DISTURBANCE)
         CALL cleanup_allocations()
