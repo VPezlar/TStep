@@ -14,6 +14,7 @@
 MODULE random_disturbance
     USE accuracy
     USE variables
+    USE state_vector, ONLY: state_length
     USE setup, ONLY: INT_TO_STR
     USE error_handling
 
