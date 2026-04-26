@@ -198,11 +198,8 @@ PROGRAM main
 
         WRITE(*,'(A)')        ' ===== R_gas sanity check ====='
         WRITE(*,'(A,ES12.4)') '  measured R_gas  = ', R_measured
+        WRITE(*,'(A)')        ' The linearization will use the per-cell ratios from p0/(rho0*T0).'
         WRITE(*,'(A)')        ' =============================='
-
-        IF (R_diff > 0.01_rk) THEN
-            WRITE(*,'(A)') ' The linearization will use the per-cell ratios from p0/(rho0*T0).'
-        END IF
     END BLOCK
 
     ! --- 8. Dump q0 to <stability_dir>/flowfield.csv for inspection ---
