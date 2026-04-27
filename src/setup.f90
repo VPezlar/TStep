@@ -56,6 +56,10 @@ CONTAINS
         INTEGER(ik) :: unit_num, status_id
         CHARACTER(len=400) :: message
 
+        ! Variables for CLI dynamic path routing
+        CHARACTER(len=512) :: input_filepath
+        INTEGER :: num_args
+
         ! General namelist (solver-agnostic)
         NAMELIST / General / flow_format, &
                              eps_0, &
@@ -78,14 +82,25 @@ CONTAINS
                               stability_dir
 
         ierr = 0
+
+        ! 1. Interrogate the OS command line for a configuration file path
+        num_args = COMMAND_ARGUMENT_COUNT()
+        IF (num_args >= 1) THEN
+            CALL GET_COMMAND_ARGUMENT(1, input_filepath)
+        ELSE
+            ! Fallback to the default relative path if no argument is provided
+            input_filepath = '../inputs/inputs.in'
+        END IF
+
+        ! 2. Safely open the dynamically routed file
         CALL get_unit(unit_num)
-        OPEN(unit_num, file="../inputs/inputs.in", status="old", &
+        OPEN(unit_num, file=TRIM(input_filepath), status="old", &
              iostat=status_id, iomsg=message)
 
         IF (status_id /= 0) THEN
             ierr = ERR_SETUP_FILE_OPEN
             CALL log_error(ERR_SETUP_FILE_OPEN, &
-                'File: ../inputs/inputs.in - '//TRIM(message))
+                'File: '//TRIM(input_filepath)//' - '//TRIM(message))
             RETURN
         END IF
 
