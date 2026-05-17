@@ -81,6 +81,14 @@ CONTAINS
                               baseflow_field, &
                               stability_dir
 
+        ! SU2-specific namelist
+        NAMELIST / SU2 / su2_config_file, &
+                         su2_restart_in, &
+                         su2_solution_out, &
+                         gamma_gas, &
+                         R_gas, &
+                         stability_dir
+
         ierr = 0
 
         ! 1. Interrogate the OS command line for a configuration file path
@@ -134,8 +142,16 @@ CONTAINS
                 CLOSE(unit_num)
                 RETURN
             END IF
+        ELSE IF (TRIM(flow_format) == 'SU2') THEN
+            READ(unit_num, nml=SU2, iostat=status_id, iomsg=message)
+            IF (status_id /= 0) THEN
+                ierr = ERR_SETUP_NAMELIST_READ
+                CALL log_error(ERR_SETUP_NAMELIST_READ, &
+                    'SU2 namelist - '//TRIM(message))
+                CLOSE(unit_num)
+                RETURN
+            END IF
         ELSE
-            ! Future solvers can be added here
             ierr = ERR_SETUP_INVALID_PARAM
             CALL log_error(ERR_SETUP_INVALID_PARAM, &
                 'Unsupported flow_format: '//TRIM(flow_format))
@@ -167,50 +183,87 @@ CONTAINS
 
         ierr = 0
 
-        ng = LEN_TRIM(baseflow_grid)
-        IF (ng == 0) THEN
-            ierr = ERR_SETUP_INVALID_PARAM
-            CALL log_error(ERR_SETUP_INVALID_PARAM, &
-                'baseflow_grid must be a non-empty path to the grid C file')
-            RETURN
-        END IF
+        IF (TRIM(flow_format) == 'OpenFOAM') THEN
+            ng = LEN_TRIM(baseflow_grid)
+            IF (ng == 0) THEN
+                ierr = ERR_SETUP_INVALID_PARAM
+                CALL log_error(ERR_SETUP_INVALID_PARAM, &
+                    'baseflow_grid must be a non-empty path to the grid C file')
+                RETURN
+            END IF
 
-        nf = LEN_TRIM(baseflow_field)
-        IF (nf == 0 .OR. baseflow_field(nf:nf) /= '/') THEN
-            ierr = ERR_SETUP_INVALID_PARAM
-            CALL log_error(ERR_SETUP_INVALID_PARAM, &
-                'baseflow_field must end with "/": '//TRIM(baseflow_field))
-            RETURN
-        END IF
+            nf = LEN_TRIM(baseflow_field)
+            IF (nf == 0 .OR. baseflow_field(nf:nf) /= '/') THEN
+                ierr = ERR_SETUP_INVALID_PARAM
+                CALL log_error(ERR_SETUP_INVALID_PARAM, &
+                    'baseflow_field must end with "/": '//TRIM(baseflow_field))
+                RETURN
+            END IF
 
-        ns = LEN_TRIM(stability_dir)
-        IF (ns == 0 .OR. stability_dir(ns:ns) /= '/') THEN
-            ierr = ERR_SETUP_INVALID_PARAM
-            CALL log_error(ERR_SETUP_INVALID_PARAM, &
-                'stability_dir must end with "/": '//TRIM(stability_dir))
-            RETURN
+            ns = LEN_TRIM(stability_dir)
+            IF (ns == 0 .OR. stability_dir(ns:ns) /= '/') THEN
+                ierr = ERR_SETUP_INVALID_PARAM
+                CALL log_error(ERR_SETUP_INVALID_PARAM, &
+                    'stability_dir must end with "/": '//TRIM(stability_dir))
+                RETURN
+            END IF
+
+        ELSE IF (TRIM(flow_format) == 'SU2') THEN
+            IF (LEN_TRIM(su2_config_file) == 0) THEN
+                ierr = ERR_SETUP_INVALID_PARAM
+                CALL log_error(ERR_SETUP_INVALID_PARAM, &
+                    'su2_config_file must be a non-empty path')
+                RETURN
+            END IF
+            IF (LEN_TRIM(su2_restart_in) == 0) THEN
+                ierr = ERR_SETUP_INVALID_PARAM
+                CALL log_error(ERR_SETUP_INVALID_PARAM, &
+                    'su2_restart_in must be a non-empty path')
+                RETURN
+            END IF
+            IF (LEN_TRIM(su2_solution_out) == 0) THEN
+                ierr = ERR_SETUP_INVALID_PARAM
+                CALL log_error(ERR_SETUP_INVALID_PARAM, &
+                    'su2_solution_out must be a non-empty path')
+                RETURN
+            END IF
+
+            ns = LEN_TRIM(stability_dir)
+            IF (ns == 0 .OR. stability_dir(ns:ns) /= '/') THEN
+                ierr = ERR_SETUP_INVALID_PARAM
+                CALL log_error(ERR_SETUP_INVALID_PARAM, &
+                    'stability_dir must end with "/": '//TRIM(stability_dir))
+                RETURN
+            END IF
         END IF
 
         ! Ensure the standard output subfolder exists under stability_dir.
-        ! TStep deposits flowfield.csv / eigenvalues.dat / eigenvectors.dat
-        ! in <stability_dir>/output/, composed internally (no user knob).
         CALL EXECUTE_COMMAND_LINE('mkdir -p '//TRIM(stability_dir)//'output/', &
                                   wait=.TRUE.)
 
         WRITE(*,'(A)')         '---------------------------------------'
         WRITE(*,'(A)')         'TStep validated paths:'
-        WRITE(*,'(A,A)')       '  baseflow_grid  = ', TRIM(baseflow_grid)
-        WRITE(*,'(A,A)')       '  baseflow_field = ', TRIM(baseflow_field)
-        WRITE(*,'(A,A)')       '  stability_dir  = ', TRIM(stability_dir)
-        WRITE(*,'(A,A)')       '  initial seed   -> ', &
-            TRIM(stability_time_dir(TSTEP_INITIAL_TIME))
-        WRITE(*,'(A,A)')       '  solver result  <- ', &
-            TRIM(stability_time_dir(TSTEP_INITIAL_TIME + TTime))
-        WRITE(*,'(A,F12.6,A)') '  TSTEP_INITIAL_TIME= ', TSTEP_INITIAL_TIME, &
-                               '   (controlDict.startTime must match)'
-        WRITE(*,'(A,F12.6,A)') '  end time (1+TTime)= ', &
-                               TSTEP_INITIAL_TIME+TTime, &
-                               '   (controlDict.endTime must match)'
+        IF (TRIM(flow_format) == 'OpenFOAM') THEN
+            WRITE(*,'(A,A)')       '  baseflow_grid  = ', TRIM(baseflow_grid)
+            WRITE(*,'(A,A)')       '  baseflow_field = ', TRIM(baseflow_field)
+            WRITE(*,'(A,A)')       '  stability_dir  = ', TRIM(stability_dir)
+            WRITE(*,'(A,A)')       '  initial seed   -> ', &
+                TRIM(stability_time_dir(TSTEP_INITIAL_TIME))
+            WRITE(*,'(A,A)')       '  solver result  <- ', &
+                TRIM(stability_time_dir(TSTEP_INITIAL_TIME + TTime))
+            WRITE(*,'(A,F12.6,A)') '  TSTEP_INITIAL_TIME= ', TSTEP_INITIAL_TIME, &
+                                   '   (controlDict.startTime must match)'
+            WRITE(*,'(A,F12.6,A)') '  end time (1+TTime)= ', &
+                                   TSTEP_INITIAL_TIME+TTime, &
+                                   '   (controlDict.endTime must match)'
+        ELSE IF (TRIM(flow_format) == 'SU2') THEN
+            WRITE(*,'(A,A)')       '  su2_config_file  = ', TRIM(su2_config_file)
+            WRITE(*,'(A,A)')       '  su2_restart_in   = ', TRIM(su2_restart_in)
+            WRITE(*,'(A,A)')       '  su2_solution_out = ', TRIM(su2_solution_out)
+            WRITE(*,'(A,A)')       '  stability_dir    = ', TRIM(stability_dir)
+            WRITE(*,'(A,ES12.4)')  '  gamma_gas        = ', gamma_gas
+            WRITE(*,'(A,ES12.4)')  '  R_gas            = ', R_gas
+        END IF
         WRITE(*,'(A)')         '---------------------------------------'
     END SUBROUTINE validate_paths
 
@@ -237,40 +290,65 @@ CONTAINS
         CHARACTER(len=512) :: cmd
         CHARACTER(len=256) :: init_dir
         INTEGER :: cmdstat, exitstat
+        LOGICAL :: src_exists
 
         ierr = 0
-        init_dir = TRIM(stability_time_dir(TSTEP_INITIAL_TIME))
 
-        ! 1. Create the destination time folder (idempotent).
-        cmd = 'mkdir -p ' // TRIM(init_dir)
-        CALL EXECUTE_COMMAND_LINE(TRIM(cmd), wait=.TRUE., &
-                                  exitstat=exitstat, cmdstat=cmdstat)
-        IF (cmdstat /= 0 .OR. exitstat /= 0) THEN
-            ierr = ERR_SETUP_FILE_OPEN
-            CALL log_error(ERR_SETUP_FILE_OPEN, &
-                'mkdir -p failed: '//TRIM(init_dir))
-            RETURN
+        IF (TRIM(flow_format) == 'OpenFOAM') THEN
+            init_dir = TRIM(stability_time_dir(TSTEP_INITIAL_TIME))
+
+            ! 1. Create the destination time folder (idempotent).
+            cmd = 'mkdir -p ' // TRIM(init_dir)
+            CALL EXECUTE_COMMAND_LINE(TRIM(cmd), wait=.TRUE., &
+                                      exitstat=exitstat, cmdstat=cmdstat)
+            IF (cmdstat /= 0 .OR. exitstat /= 0) THEN
+                ierr = ERR_SETUP_FILE_OPEN
+                CALL log_error(ERR_SETUP_FILE_OPEN, &
+                    'mkdir -p failed: '//TRIM(init_dir))
+                RETURN
+            END IF
+
+            ! 2. Seed p, rho, T, U with the baseflow templates.
+            cmd = 'cp -pRf ' // TRIM(baseflow_field) // 'p '    // &
+                               TRIM(baseflow_field) // 'rho '  // &
+                               TRIM(baseflow_field) // 'T '    // &
+                               TRIM(baseflow_field) // 'U '    // &
+                               TRIM(init_dir)
+            CALL EXECUTE_COMMAND_LINE(TRIM(cmd), wait=.TRUE., &
+                                      exitstat=exitstat, cmdstat=cmdstat)
+            IF (cmdstat /= 0 .OR. exitstat /= 0) THEN
+                ierr = ERR_SETUP_FILE_OPEN
+                CALL log_error(ERR_SETUP_FILE_OPEN, &
+                    'cp -pRf failed: '//TRIM(baseflow_field)//'{p,rho,T,U} -> '//TRIM(init_dir))
+                RETURN
+            END IF
+
+            WRITE(*,'(A,A)') 'Seeded initial state: ', TRIM(init_dir)
+
+        ELSE IF (TRIM(flow_format) == 'SU2') THEN
+            ! SU2: copy su2_solution_out -> su2_restart_in so the writer has
+            ! a real file whose header it can preserve.
+            INQUIRE(FILE=TRIM(su2_solution_out), EXIST=src_exists)
+            IF (src_exists) THEN
+                cmd = 'cp -pRf ' // TRIM(su2_solution_out) // ' ' // &
+                                    TRIM(su2_restart_in)
+                CALL EXECUTE_COMMAND_LINE(TRIM(cmd), wait=.TRUE., &
+                                          exitstat=exitstat, cmdstat=cmdstat)
+                IF (cmdstat /= 0 .OR. exitstat /= 0) THEN
+                    ierr = ERR_SETUP_FILE_OPEN
+                    CALL log_error(ERR_SETUP_FILE_OPEN, &
+                        'cp -pRf failed: '//TRIM(su2_solution_out)// &
+                        ' -> '//TRIM(su2_restart_in))
+                    RETURN
+                END IF
+                WRITE(*,'(A,A)') 'SU2 seeded restart_in from: ', &
+                    TRIM(su2_solution_out)
+            ELSE
+                WRITE(*,'(A)') 'WARNING: su2_solution_out does not exist yet.'
+                WRITE(*,'(A)') '  User must pre-seed su2_restart_in with a '// &
+                    'base-flow restart file: '//TRIM(su2_restart_in)
+            END IF
         END IF
-
-        ! 2. Seed p, rho, T, U with the baseflow templates. -p preserves
-        !    permissions/timestamps, -R recurses (harmless on plain files),
-        !    -f overwrites stale files from a previous TStep run. Using
-        !    -pRf rather than GNU-only `-a` keeps this portable to BSD/macOS.
-        cmd = 'cp -pRf ' // TRIM(baseflow_field) // 'p '    // &
-                           TRIM(baseflow_field) // 'rho '  // &
-                           TRIM(baseflow_field) // 'T '    // &
-                           TRIM(baseflow_field) // 'U '    // &
-                           TRIM(init_dir)
-        CALL EXECUTE_COMMAND_LINE(TRIM(cmd), wait=.TRUE., &
-                                  exitstat=exitstat, cmdstat=cmdstat)
-        IF (cmdstat /= 0 .OR. exitstat /= 0) THEN
-            ierr = ERR_SETUP_FILE_OPEN
-            CALL log_error(ERR_SETUP_FILE_OPEN, &
-                'cp -pRf failed: '//TRIM(baseflow_field)//'{p,rho,T,U} -> '//TRIM(init_dir))
-            RETURN
-        END IF
-
-        WRITE(*,'(A,A)') 'Seeded initial state: ', TRIM(init_dir)
     END SUBROUTINE seed_stability_initial
 
 
@@ -309,26 +387,46 @@ CONTAINS
         INTEGER :: cmdstat, exitstat
 
         ierr = 0
-        init_dir = TRIM(stability_time_dir(TSTEP_INITIAL_TIME))
-        CALL find_endpoint_folder(end_dir, ierr)
-        IF (ierr /= 0) RETURN
 
-        cmd = 'cp -pRf ' // TRIM(end_dir) // 'p '    // &
-                           TRIM(end_dir) // 'rho '  // &
-                           TRIM(end_dir) // 'T '    // &
-                           TRIM(end_dir) // 'U '    // &
-                           TRIM(init_dir)
-        CALL EXECUTE_COMMAND_LINE(TRIM(cmd), wait=.TRUE., &
-                                  exitstat=exitstat, cmdstat=cmdstat)
-        IF (cmdstat /= 0 .OR. exitstat /= 0) THEN
-            ierr = ERR_SETUP_FILE_OPEN
-            CALL log_error(ERR_SETUP_FILE_OPEN, &
-                'cp -pRf failed: '//TRIM(end_dir)//'{p,rho,T,U} -> '//TRIM(init_dir))
-            RETURN
+        IF (TRIM(flow_format) == 'OpenFOAM') THEN
+            init_dir = TRIM(stability_time_dir(TSTEP_INITIAL_TIME))
+            CALL find_endpoint_folder(end_dir, ierr)
+            IF (ierr /= 0) RETURN
+
+            cmd = 'cp -pRf ' // TRIM(end_dir) // 'p '    // &
+                               TRIM(end_dir) // 'rho '  // &
+                               TRIM(end_dir) // 'T '    // &
+                               TRIM(end_dir) // 'U '    // &
+                               TRIM(init_dir)
+            CALL EXECUTE_COMMAND_LINE(TRIM(cmd), wait=.TRUE., &
+                                      exitstat=exitstat, cmdstat=cmdstat)
+            IF (cmdstat /= 0 .OR. exitstat /= 0) THEN
+                ierr = ERR_SETUP_FILE_OPEN
+                CALL log_error(ERR_SETUP_FILE_OPEN, &
+                    'cp -pRf failed: '//TRIM(end_dir)//'{p,rho,T,U} -> '//TRIM(init_dir))
+                RETURN
+            END IF
+
+            WRITE(*,'(A,A,A,A)') 'Promoted solver output ', TRIM(end_dir), &
+                                 ' -> ', TRIM(init_dir)
+
+        ELSE IF (TRIM(flow_format) == 'SU2') THEN
+            ! SU2: copy su2_solution_out over su2_restart_in
+            cmd = 'cp -pRf ' // TRIM(su2_solution_out) // ' ' // &
+                                TRIM(su2_restart_in)
+            CALL EXECUTE_COMMAND_LINE(TRIM(cmd), wait=.TRUE., &
+                                      exitstat=exitstat, cmdstat=cmdstat)
+            IF (cmdstat /= 0 .OR. exitstat /= 0) THEN
+                ierr = ERR_SETUP_FILE_OPEN
+                CALL log_error(ERR_SETUP_FILE_OPEN, &
+                    'cp -pRf failed: '//TRIM(su2_solution_out)// &
+                    ' -> '//TRIM(su2_restart_in))
+                RETURN
+            END IF
+
+            WRITE(*,'(A,A,A,A)') 'SU2 promoted: ', TRIM(su2_solution_out), &
+                                 ' -> ', TRIM(su2_restart_in)
         END IF
-
-        WRITE(*,'(A,A,A,A)') 'Promoted solver output ', TRIM(end_dir), &
-                             ' -> ', TRIM(init_dir)
     END SUBROUTINE promote_to_initial_state
 
 
@@ -371,16 +469,20 @@ CONTAINS
         INTEGER(ik), INTENT(OUT) :: ierr
         CHARACTER(len=1024) :: cmd
         ierr = 0
-        ! POSIX-only `find` invocation (portable to BSD/macOS): no -regextype.
-        ! We select every direct subfolder that is NOT the initial-state seed
-        ! '1' or a structural OpenFOAM directory (constant, system, output).
-        ! Any remaining subfolder under <stab>/ is by construction a
-        ! solver-written time directory, so this is safe.
-        cmd = 'find '//TRIM(stability_dir)//&
-              ' -mindepth 1 -maxdepth 1 -type d'//&
-              ' ! -name 1 ! -name constant ! -name system ! -name output'//&
-              ' -exec rm -rf {} +'
-        CALL EXECUTE_COMMAND_LINE(TRIM(cmd), wait=.TRUE.)
+
+        IF (TRIM(flow_format) == 'OpenFOAM') THEN
+            ! POSIX-only `find` invocation (portable to BSD/macOS).
+            cmd = 'find '//TRIM(stability_dir)//&
+                  ' -mindepth 1 -maxdepth 1 -type d'//&
+                  ' ! -name 1 ! -name constant ! -name system ! -name output'//&
+                  ' -exec rm -rf {} +'
+            CALL EXECUTE_COMMAND_LINE(TRIM(cmd), wait=.TRUE.)
+
+        ELSE IF (TRIM(flow_format) == 'SU2') THEN
+            ! SU2: single static file -- just remove su2_solution_out.
+            CALL EXECUTE_COMMAND_LINE('rm -f '//TRIM(su2_solution_out), &
+                                      wait=.TRUE.)
+        END IF
     END SUBROUTINE clear_endpoint_folder
 
 
@@ -409,35 +511,40 @@ CONTAINS
 
         ierr        = 0
         path        = ''
-        folder_name = ''
-        tmpfile     = TRIM(stability_dir)//'tstep_endpoint.txt'
 
-        ! List <stab>, keep numeric names != '1', sort by value, pick max.
-        ! awk pattern: /^[0-9]/ matches numeric-starting names; $0 != "1"
-        ! excludes the initial-state folder. `sort -n` (POSIX) suffices:
-        ! OpenFOAM time folders are always fixed-point decimal, so we do
-        ! not need GNU's `-g` (general numeric / scientific-notation) mode.
-        cmd = 'cd '//TRIM(stability_dir)//' && ls -1 2>/dev/null'//&
-              ' | awk ''/^[0-9]/ && $0 != "1"'''//&
-              ' | sort -n | tail -n 1 > '//TRIM(tmpfile)
-        CALL EXECUTE_COMMAND_LINE(TRIM(cmd), wait=.TRUE.)
+        IF (TRIM(flow_format) == 'OpenFOAM') THEN
+            folder_name = ''
+            tmpfile     = TRIM(stability_dir)//'tstep_endpoint.txt'
 
-        CALL get_unit(u)
-        OPEN(u, file=TRIM(tmpfile), status='old', action='read', iostat=io_stat)
-        IF (io_stat == 0) THEN
-            READ(u, '(A)', iostat=io_stat) folder_name
-            CLOSE(u)
+            ! List <stab>, keep numeric names != '1', sort by value, pick max.
+            cmd = 'cd '//TRIM(stability_dir)//' && ls -1 2>/dev/null'//&
+                  ' | awk ''/^[0-9]/ && $0 != "1"'''//&
+                  ' | sort -n | tail -n 1 > '//TRIM(tmpfile)
+            CALL EXECUTE_COMMAND_LINE(TRIM(cmd), wait=.TRUE.)
+
+            CALL get_unit(u)
+            OPEN(u, file=TRIM(tmpfile), status='old', action='read', &
+                 iostat=io_stat)
+            IF (io_stat == 0) THEN
+                READ(u, '(A)', iostat=io_stat) folder_name
+                CLOSE(u)
+            END IF
+
+            IF (LEN_TRIM(folder_name) == 0) THEN
+                ierr = ERR_SETUP_INVALID_PARAM
+                CALL log_error(ERR_SETUP_INVALID_PARAM, &
+                    'find_endpoint_folder: no post-solver time folder found '// &
+                    'under '//TRIM(stability_dir)// &
+                    ' (solver did not write, or controlDict wrong)')
+                RETURN
+            END IF
+
+            path = TRIM(stability_dir)//TRIM(folder_name)//'/'
+
+        ELSE IF (TRIM(flow_format) == 'SU2') THEN
+            ! SU2: single static file -- no folder hunting needed.
+            path = TRIM(su2_solution_out)
         END IF
-
-        IF (LEN_TRIM(folder_name) == 0) THEN
-            ierr = ERR_SETUP_INVALID_PARAM
-            CALL log_error(ERR_SETUP_INVALID_PARAM, &
-                'find_endpoint_folder: no post-solver time folder found under '&
-                //TRIM(stability_dir)//' (solver did not write, or controlDict wrong)')
-            RETURN
-        END IF
-
-        path = TRIM(stability_dir)//TRIM(folder_name)//'/'
     END SUBROUTINE find_endpoint_folder
 
 
