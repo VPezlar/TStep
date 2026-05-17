@@ -105,6 +105,15 @@ MODULE error_handling
     INTEGER(ik), PARAMETER :: ERR_STATE_SHAPE_MISMATCH = 1101
     INTEGER(ik), PARAMETER :: ERR_STATE_VECTOR_SIZE    = 1102
 
+    ! --- SU2 I/O Module (1200-1299) ---
+    INTEGER(ik), PARAMETER :: ERR_SU2_OPEN           = 1201
+    INTEGER(ik), PARAMETER :: ERR_SU2_HEADER         = 1202
+    INTEGER(ik), PARAMETER :: ERR_SU2_MISSING_COLUMN = 1203
+    INTEGER(ik), PARAMETER :: ERR_SU2_ALLOC          = 1204
+    INTEGER(ik), PARAMETER :: ERR_SU2_READ           = 1205
+    INTEGER(ik), PARAMETER :: ERR_SU2_WRITE          = 1206
+    INTEGER(ik), PARAMETER :: ERR_SU2_RENAME         = 1207
+
     
     ! ============================================================
     ! ERROR MESSAGE LOOKUP
@@ -130,6 +139,8 @@ MODULE error_handling
               ERR_EIGENDATA_OPEN_EVAL, ERR_EIGENDATA_OPEN_EVEC, &
               ERR_FRECHET_INVALID_ORDER, ERR_FRECHET_ALLOC, ERR_FRECHET_SOLVE, &
               ERR_STATE_SHAPE_MISMATCH, ERR_STATE_VECTOR_SIZE, &
+              ERR_SU2_OPEN, ERR_SU2_HEADER, ERR_SU2_MISSING_COLUMN, &
+              ERR_SU2_ALLOC, ERR_SU2_READ, ERR_SU2_WRITE, ERR_SU2_RENAME, &
               log_error, get_module_name, get_error_description
     
 CONTAINS
@@ -167,6 +178,8 @@ CONTAINS
                 module_name = "FRECHET_STENCIL"
             CASE (11)
                 module_name = "STATE_VECTOR"
+            CASE (12)
+                module_name = "SU2_IO"
             CASE DEFAULT
                 module_name = "UNKNOWN_MODULE"
         END SELECT
@@ -309,6 +322,22 @@ CONTAINS
                 description = "State vector: field arrays have mismatched lengths"
             CASE (ERR_STATE_VECTOR_SIZE)
                 description = "State vector: total length does not equal NVARS*Nmesh"
+
+            ! SU2 I/O errors
+            CASE (ERR_SU2_OPEN)
+                description = "Cannot open SU2 restart file"
+            CASE (ERR_SU2_HEADER)
+                description = "Error parsing SU2 restart header line"
+            CASE (ERR_SU2_MISSING_COLUMN)
+                description = "Required column missing from SU2 restart header"
+            CASE (ERR_SU2_ALLOC)
+                description = "Memory allocation failed in SU2 I/O"
+            CASE (ERR_SU2_READ)
+                description = "Error reading SU2 restart data"
+            CASE (ERR_SU2_WRITE)
+                description = "Error writing SU2 restart data"
+            CASE (ERR_SU2_RENAME)
+                description = "Rename of SU2 temp file failed"
                 
             CASE DEFAULT
                 description = "Unknown error code"
