@@ -36,6 +36,7 @@ OBJECTS = accuracy.o \
 	  state_vector.o \
 	  frechet_stencil.o \
 	  OpenFOAM_IO.o \
+	  SU2_IO.o \
 	  read_flow.o \
 	  write_flow.o \
 	  call_CFD.o \

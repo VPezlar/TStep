@@ -69,3 +69,12 @@
     baseflow_field = '/home/vojtech-p/work/Projects/TStep_Dev/wedge15Ma5/BF/1/',
     stability_dir  = '/home/vojtech-p/work/Projects/TStep_Dev/wedge15Ma5/Stab_TS/',
 /
+
+! &SU2
+!     su2_config_file  = '/path/to/su2_case/flow.cfg',
+!     su2_restart_in   = '/path/to/su2_case/restart_flow_in.csv',
+!     su2_solution_out = '/path/to/su2_case/restart_flow.csv',
+!     gamma_gas        = 1.4d0,
+!     R_gas            = 287.058d0,
+!     stability_dir    = '/path/to/su2_case/Stab_TS/',
+! /
