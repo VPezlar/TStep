@@ -415,6 +415,23 @@ CONTAINS
             T(row)   = p(row) / (dens * R_gas)
         END DO
 
+        ! --- Sanity check: verify the next line is NOT another data row ---
+        ! Guards against silent mesh truncation from blank lines or other
+        ! anomalies that caused is_data_row to return .FALSE. mid-data.
+        READ(unit_num, '(A)', IOSTAT=ios) line_buf
+        IF (ios == 0) THEN
+            IF (is_data_row(line_buf)) THEN
+                ierr = ERR_SU2_READ
+                CALL log_error(ERR_SU2_READ, &
+                    'Data row found after expected end of data block '// &
+                    '(row count from first pass was '// &
+                    TRIM(INT_TO_STR(nrows))//'). Possible blank line '// &
+                    'in data section of: '//TRIM(filepath))
+                CLOSE(unit_num)
+                RETURN
+            END IF
+        END IF
+
         n = nrows
         CLOSE(unit_num)
 
@@ -619,12 +636,24 @@ CONTAINS
 
             ntokens = ntokens + 1
             IF (ntokens <= MAX_SU2_COLS) THEN
-                tokens(ntokens) = ADJUSTL(line(start:pos-1))
+                IF (start <= pos - 1) THEN
+                    tokens(ntokens) = ADJUSTL(line(start:pos-1))
+                ELSE
+                    tokens(ntokens) = ''   ! empty field (trailing comma)
+                END IF
             END IF
 
             ! Skip the comma
             pos = pos + 1
         END DO
+
+        ! Handle trailing comma: if the line ends with ',' the loop above
+        ! exits with pos = llen+2, but the empty field after the final
+        ! comma was never captured. Detect and add it.
+        IF (llen > 0 .AND. line(llen:llen) == ',') THEN
+            ntokens = ntokens + 1
+            IF (ntokens <= MAX_SU2_COLS) tokens(ntokens) = ''
+        END IF
     END SUBROUTINE tokenize_csv
 
 END MODULE SU2_IO

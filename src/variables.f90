@@ -70,8 +70,10 @@ MODULE variables
     CHARACTER(len=256) :: su2_config_file  ! path to the SU2 .cfg file
     CHARACTER(len=256) :: su2_restart_in   ! restart TStep writes (SU2 reads)
     CHARACTER(len=256) :: su2_solution_out ! restart SU2 writes (TStep reads)
-    REAL(rk)           :: gamma_gas        ! ratio of specific heats
-    REAL(rk)           :: R_gas            ! specific gas constant
+    REAL(rk)           :: gamma_gas = -1.0_rk  ! ratio of specific heats
+                                               ! (sentinel; must be set in &SU2)
+    REAL(rk)           :: R_gas     = -1.0_rk  ! specific gas constant
+                                               ! (sentinel; must be set in &SU2)
 
     ! --- &Arnoldi namelist: algorithm parameters ----------------------------
     INTEGER(ik)       :: krylov_size         ! Krylov subspace size

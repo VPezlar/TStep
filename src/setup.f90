@@ -235,6 +235,22 @@ CONTAINS
                     'stability_dir must end with "/": '//TRIM(stability_dir))
                 RETURN
             END IF
+
+            ! Validate gas constants (sentinels detect "never set")
+            IF (gamma_gas <= 1.0_rk) THEN
+                ierr = ERR_SETUP_INVALID_PARAM
+                CALL log_error(ERR_SETUP_INVALID_PARAM, &
+                    'gamma_gas must be > 1.0 (ideal gas); got sentinel or '// &
+                    'invalid value. Set it in &SU2 namelist.')
+                RETURN
+            END IF
+            IF (R_gas <= 0.0_rk) THEN
+                ierr = ERR_SETUP_INVALID_PARAM
+                CALL log_error(ERR_SETUP_INVALID_PARAM, &
+                    'R_gas must be > 0.0; got sentinel or invalid value. '// &
+                    'Set it in &SU2 namelist.')
+                RETURN
+            END IF
         END IF
 
         ! Ensure the standard output subfolder exists under stability_dir.
