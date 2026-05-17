@@ -158,13 +158,23 @@ PROGRAM main
             CALL cleanup_allocations()
             STOP ERR_SETUP_INVALID_PARAM
         END IF
-        INQUIRE(FILE=TRIM(ep_warmup)//'p', EXIST=ep_file_exists)
-        IF (.NOT. ep_file_exists) THEN
-            CALL log_error(ERR_SETUP_INVALID_PARAM, &
-                'Warmup endpoint folder '//TRIM(ep_warmup)//&
-                ' exists but has no p file. Check controlDict.')
-            CALL cleanup_allocations()
-            STOP ERR_SETUP_INVALID_PARAM
+        IF (TRIM(flow_format) == 'OpenFOAM') THEN
+            INQUIRE(FILE=TRIM(ep_warmup)//'p', EXIST=ep_file_exists)
+            IF (.NOT. ep_file_exists) THEN
+                CALL log_error(ERR_SETUP_INVALID_PARAM, &
+                    'Warmup endpoint folder '//TRIM(ep_warmup)//&
+                    ' exists but has no p file. Check controlDict.')
+                CALL cleanup_allocations()
+                STOP ERR_SETUP_INVALID_PARAM
+            END IF
+        ELSE IF (TRIM(flow_format) == 'SU2') THEN
+            INQUIRE(FILE=TRIM(ep_warmup), EXIST=ep_file_exists)
+            IF (.NOT. ep_file_exists) THEN
+                CALL log_error(ERR_SETUP_INVALID_PARAM, &
+                    'SU2 solution file not found: '//TRIM(ep_warmup))
+                CALL cleanup_allocations()
+                STOP ERR_SETUP_INVALID_PARAM
+            END IF
         END IF
     END BLOCK
 
@@ -177,9 +187,15 @@ PROGRAM main
     END IF
 
     ! --- 7. Load q0 into memory (base state for the Arnoldi loop) ---
-    CALL read_flowfield(rho0, p0, T0, U0, V0, W0, &
-                        Xgrid, Ygrid, Zgrid, dc_tmp, error_status, &
-                        path_override=stability_time_dir(TSTEP_INITIAL_TIME))
+    IF (TRIM(flow_format) == 'SU2') THEN
+        CALL read_flowfield(rho0, p0, T0, U0, V0, W0, &
+                            Xgrid, Ygrid, Zgrid, dc_tmp, error_status, &
+                            path_override=su2_restart_in)
+    ELSE
+        CALL read_flowfield(rho0, p0, T0, U0, V0, W0, &
+                            Xgrid, Ygrid, Zgrid, dc_tmp, error_status, &
+                            path_override=stability_time_dir(TSTEP_INITIAL_TIME))
+    END IF
     IF (error_status /= 0) THEN
         CALL log_error(ERR_MAIN_READ_FLOW)
         CALL cleanup_allocations()
@@ -242,13 +258,23 @@ PROGRAM main
             CALL cleanup_allocations()
             STOP ERR_SETUP_INVALID_PARAM
         END IF
-        INQUIRE(FILE=TRIM(ep_cache)//'p', EXIST=fq0_exists)
-        IF (.NOT. fq0_exists) THEN
-            CALL log_error(ERR_SETUP_INVALID_PARAM, &
-                'F(q0) endpoint folder '//TRIM(ep_cache)//&
-                ' has no p file. Check controlDict.')
-            CALL cleanup_allocations()
-            STOP ERR_SETUP_INVALID_PARAM
+        IF (TRIM(flow_format) == 'OpenFOAM') THEN
+            INQUIRE(FILE=TRIM(ep_cache)//'p', EXIST=fq0_exists)
+            IF (.NOT. fq0_exists) THEN
+                CALL log_error(ERR_SETUP_INVALID_PARAM, &
+                    'F(q0) endpoint folder '//TRIM(ep_cache)//&
+                    ' has no p file. Check controlDict.')
+                CALL cleanup_allocations()
+                STOP ERR_SETUP_INVALID_PARAM
+            END IF
+        ELSE IF (TRIM(flow_format) == 'SU2') THEN
+            INQUIRE(FILE=TRIM(ep_cache), EXIST=fq0_exists)
+            IF (.NOT. fq0_exists) THEN
+                CALL log_error(ERR_SETUP_INVALID_PARAM, &
+                    'SU2 solution file not found: '//TRIM(ep_cache))
+                CALL cleanup_allocations()
+                STOP ERR_SETUP_INVALID_PARAM
+            END IF
         END IF
 
         CALL read_flowfield(F_q0_rho, F_q0_p, F_q0_T, F_q0_U, F_q0_V, F_q0_W, &
