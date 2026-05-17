@@ -28,6 +28,7 @@ MODULE write_flow
     USE variables
     USE setup
     USE OpenFOAM_IO
+    USE SU2_IO
     USE error_handling
 
     IMPLICIT NONE
@@ -49,12 +50,15 @@ CONTAINS
 
         error_status = 0
 
-        ! Choose target directory: explicit override, or the default seeded
-        ! initial-state folder '<stability_dir>/1/'.
+        ! Choose target: explicit override, or default based on flow_format.
         IF (PRESENT(path_override)) THEN
             path_used = path_override
         ELSE
-            path_used = stability_time_dir(TSTEP_INITIAL_TIME)
+            IF (TRIM(flow_format) == 'SU2') THEN
+                path_used = su2_restart_in
+            ELSE
+                path_used = stability_time_dir(TSTEP_INITIAL_TIME)
+            END IF
         END IF
 
         WRITE(*,*) 'Attempting to write data to:', TRIM(path_used)
@@ -89,10 +93,20 @@ CONTAINS
                 RETURN
             END IF
 
+        ELSE IF (TRIM(flow_format) == 'SU2') THEN
+            CALL write_SU2_restart(TRIM(path_used), rho_out, p_out, T_out, &
+                                  U_out, V_out, W_out, data_count, &
+                                  error_status)
+            IF (error_status /= 0) THEN
+                CALL log_error(ERR_FLOW_PRESSURE, &
+                    'SU2 write failed: '//TRIM(path_used))
+                RETURN
+            END IF
+
         ELSE
             error_status = ERR_FLOW_UNKNOWN_FORMAT
             CALL log_error(ERR_FLOW_UNKNOWN_FORMAT, &
-                'flow_format = '//TRIM(flow_format)//' (supported: OpenFOAM)')
+                'flow_format = '//TRIM(flow_format)//' (supported: OpenFOAM, SU2)')
             RETURN
         END IF
 

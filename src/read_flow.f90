@@ -30,6 +30,7 @@ MODULE read_flow
     USE variables
     USE setup
     USE OpenFOAM_IO
+    USE SU2_IO
     USE error_handling
 
     IMPLICIT NONE
@@ -55,11 +56,15 @@ CONTAINS
         error_status = 0
         data_count   = 0
 
-        ! Choose path: explicit override, or default baseflow archive
+        ! Choose path: explicit override, or default based on flow_format
         IF (PRESENT(path_override)) THEN
             path_used = path_override
         ELSE
-            path_used = baseflow_field
+            IF (TRIM(flow_format) == 'SU2') THEN
+                path_used = su2_restart_in
+            ELSE
+                path_used = baseflow_field
+            END IF
         END IF
 
         WRITE(*,*) 'Attempting to read data from:', TRIM(baseflow_grid)
@@ -136,11 +141,23 @@ CONTAINS
                 RETURN
             END IF
 
+        ELSE IF (TRIM(flow_format) == 'SU2') THEN
+            ! SU2: single file contains grid + flow data; all six fields +
+            ! grid come from one call, so cross-field count checks are implicit.
+            CALL read_SU2_solution(TRIM(path_used), rho_in, p_in, T_in, &
+                                  U_in, V_in, W_in, &
+                                  Xgrid, Ygrid, Zgrid, data_count, &
+                                  error_status)
+            IF (error_status /= 0) THEN
+                CALL log_error(ERR_FLOW_GRID, 'SU2 read failed: '//TRIM(path_used))
+                RETURN
+            END IF
+
         ELSE
             ! Unsupported format: fail loudly rather than return an empty flowfield.
             error_status = ERR_FLOW_UNKNOWN_FORMAT
             CALL log_error(ERR_FLOW_UNKNOWN_FORMAT, &
-                'flow_format = '//TRIM(flow_format)//' (supported: OpenFOAM)')
+                'flow_format = '//TRIM(flow_format)//' (supported: OpenFOAM, SU2)')
             RETURN
         END IF
 
