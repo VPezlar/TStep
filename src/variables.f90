@@ -66,6 +66,13 @@ MODULE variables
     CHARACTER(len=256) :: baseflow_field   ! dir with p/rho/T/U (ends in '/')
     CHARACTER(len=256) :: stability_dir    ! analysis/working case root ('/')
 
+    ! --- &SU2 namelist: SU2-specific path inputs ----------------------------
+    CHARACTER(len=256) :: su2_config_file  ! path to the SU2 .cfg file
+    CHARACTER(len=256) :: su2_restart_in   ! restart TStep writes (SU2 reads)
+    CHARACTER(len=256) :: su2_solution_out ! restart SU2 writes (TStep reads)
+    REAL(rk)           :: gamma_gas        ! ratio of specific heats
+    REAL(rk)           :: R_gas            ! specific gas constant
+
     ! --- &Arnoldi namelist: algorithm parameters ----------------------------
     INTEGER(ik)       :: krylov_size         ! Krylov subspace size
     INTEGER(ik)       :: frechet_order       ! Order of the frechet derivative
