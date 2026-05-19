@@ -1,0 +1,130 @@
+SU2 Solver Support for TStep — Implementation Summary
+======================================================
+
+Branch
+------
+feature/su2-support (forked from zeus)
+
+What Was Built
+--------------
+A complete SU2 CFD backend for TStep, selectable via flow_format = 'SU2'
+in inputs.in. Zero changes to the mathematical core (Arnoldi.f90,
+state_vector.f90, frechet_stencil.f90).
+
+Commit History
+--------------
+e24fdcf  Phase 1: Add SU2 configuration globals and namelist reading
+670adc7  Phase 2: Add SU2 branches to all setup utility routines
+3d45c9d  Phase 3: Add SU2_IO module and error codes
+fd26077  Phase 4: Add SU2 dispatch to read_flow and write_flow
+200e01c  Phase 5: Gate main.f90 endpoint checks on flow_format
+7611add  Build system, inputs, and documentation for SU2 support
+3285de6  Fix review bugs: sentinel gas constants, row-count sanity check,
+         trailing-comma tokenizer
+
+Files Changed
+-------------
+- src/variables.f90
+    5 new SU2 globals (su2_config_file, su2_restart_in, su2_solution_out,
+    gamma_gas, R_gas); gas constants initialized to -1.0 sentinels.
+
+- src/setup.f90
+    &SU2 namelist read in configurationRead; SU2 branches in all 5 utility
+    routines (validate_paths, seed_stability_initial, promote_to_initial_state,
+    find_endpoint_folder, clear_endpoint_folder); gamma_gas/R_gas validation.
+
+- src/error_handling.f90
+    7 new ERR_SU2_* codes (1200-1207).
+
+- src/read_flow.f90
+    SU2 dispatch; default path branches to su2_restart_in.
+
+- src/write_flow.f90
+    SU2 dispatch; default path branches to su2_restart_in.
+
+- src/main.f90
+    Endpoint INQUIRE checks gated on flow_format (SU2 checks the file
+    directly instead of appending 'p' to a directory); step-7 q0 read
+    branched for SU2.
+
+- bin/makefile
+    SU2_IO.o in dependency order.
+
+- inputs/inputs.in
+    Commented-out &SU2 example block with correct variables.
+
+Files Created
+-------------
+- src/SU2_IO.f90
+    The core new module:
+    * read_SU2_solution: parses quoted CSV header to discover column indices
+      at runtime, reads conservative variables, converts to TStep's primitive
+      [rho, p, T, U, V, W], extracts grid from the same file.
+    * write_SU2_restart: converts primitive->conservative, reads old file in
+      lockstep to preserve header + non-flow columns (PointID, coordinates),
+      writes .tmp then c_rename atomically.
+    * Helper routines: parse_header, find_column, is_data_row,
+      parse_csv_value, tokenize_csv.
+
+- docs/SU2_INTEGRATION.md
+    Integration summary with conversion math and configuration guide.
+
+- docs/SU2_IMPLEMENTATION_SUMMARY.txt
+    This file.
+
+Key Design Decisions
+--------------------
+- Conservative<->primitive conversion exclusively in SU2_IO.f90; rest of
+  TStep only sees primitive variables.
+- Column indices discovered by name, never hard-coded; survives SU2 version
+  drift.
+- SU2 uses single static restart file; no time-stamped folders.
+  find_endpoint_folder returns su2_solution_out directly;
+  clear_endpoint_folder does rm -f on that file.
+- Grid embedded in SU2 restart; baseflow_grid is unused for SU2.
+- Writer preserves header verbatim; tokenizes old rows, replaces only the
+  5 flow columns, reassembles.
+
+Conversion Math
+---------------
+Conservative -> primitive:
+    U = Momentum_x / Density
+    V = Momentum_y / Density
+    W = Momentum_z / Density
+    p = (gamma_gas - 1) * (Energy - 0.5 * Density * (U^2 + V^2 + W^2))
+    T = p / (Density * R_gas)
+    rho = Density
+
+Primitive -> conservative:
+    Density    = rho
+    Momentum_x = rho * U
+    Momentum_y = rho * V
+    Momentum_z = rho * W
+    Energy     = p / (gamma_gas - 1) + 0.5 * rho * (U^2 + V^2 + W^2)
+
+Review Bugs Fixed (commit 3285de6)
+-----------------------------------
+1. Sentinel gas constants: gamma_gas/R_gas init to -1.0; validate_paths
+   rejects gamma <= 1 and R <= 0 with clear messages.
+2. Row-count sanity check: after second-pass read, peek next line; error
+   if it is another data row (catches silent truncation from blank lines).
+3. Trailing-comma tokenizer: handles empty last field and adjacent commas
+   without out-of-bounds.
+
+Compilation
+-----------
+Clean compile verified with gfortran -O3 -Wall on macOS (arm64). Only
+pre-existing warnings (set_blas_threads unused in main.f90, T unused in
+write_SU2_restart — correct, not needed for the EOS write path).
+
+Before First HPC Run
+---------------------
+1. Verify column names: head -1 a real SU2 restart file. Code expects:
+   x, y, z, Density, Momentum_x, Momentum_y, Momentum_z, Energy.
+   Some SU2 versions use different names (Conservative_1...Conservative_5,
+   or X-Momentum). If different, update the 8 find_column string literals
+   in SU2_IO.f90.
+
+2. Smoke test: krylov_size=2 with the SU2 backend. The eps_s line alone
+   validates the entire I/O border (parsing, column discovery, conversion,
+   round-trip write).

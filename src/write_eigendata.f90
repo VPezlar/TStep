@@ -105,6 +105,28 @@ CONTAINS
             WRITE(unit_eval, '(I6,3ES25.15)') idx, REAL(mu), AIMAG(mu), ABS(mu)
         END DO
 
+        ! ---------------------------------------------------------------------
+        ! Run summary (trailing comment block) -- records the inputs that
+        ! produced this spectrum, so the .dat file is self-documenting.
+        ! All lines start with '#' so loadtxt / readmatrix skip them.
+        ! ---------------------------------------------------------------------
+        WRITE(unit_eval, '(A)') '#'
+        WRITE(unit_eval, '(A)') '# ============================ RUN SUMMARY ============================'
+        WRITE(unit_eval, '(A,A)')       '#   flow_format        : ', TRIM(flow_format)
+        WRITE(unit_eval, '(A,ES15.6)')  '#   integration tau    : ', TTime
+        WRITE(unit_eval, '(A,I0)')      '#   krylov_size  M     : ', krylov_size
+        WRITE(unit_eval, '(A,I0)')      '#   frechet_order      : ', frechet_order
+        WRITE(unit_eval, '(A,ES15.6)')  '#   eps_0              : ', eps_0
+        WRITE(unit_eval, '(A,ES15.6)')  '#   EPS_S_TOL          : ', EPS_S_TOL
+        WRITE(unit_eval, '(A,A)')       '#   eigenvalue_sort_by : ', TRIM(eigenvalue_sort_by)
+        WRITE(unit_eval, '(A,I0)')      '#   num_threads        : ', num_threads
+        IF (TRIM(flow_format) == 'SU2') THEN
+            WRITE(unit_eval, '(A,ES15.6)') '#   gamma_gas          : ', gamma_gas
+            WRITE(unit_eval, '(A,ES15.6)') '#   R_gas              : ', R_gas
+        END IF
+        WRITE(unit_eval, '(A,A)')       '#   COMMAND_RUN        : ', TRIM(COMMAND_RUN)
+        WRITE(unit_eval, '(A)') '# ====================================================================='
+
         CLOSE(unit_eval)
         WRITE(*,*) 'SUCCESS: Wrote eigenvalues to ', TRIM(stability_output_path('eigenvalues.dat'))
 
