@@ -68,8 +68,9 @@ MODULE variables
 
     ! --- &SU2 namelist: SU2-specific path inputs ----------------------------
     CHARACTER(len=256) :: su2_config_file  ! path to the SU2 .cfg file
-    CHARACTER(len=256) :: su2_restart_in   ! restart TStep writes (SU2 reads)
-    CHARACTER(len=256) :: su2_solution_out ! restart SU2 writes (TStep reads)
+    CHARACTER(len=256) :: su2_restart_in   ! full path to solution_flow_00000.csv
+                                           ! (TStep writes here; SU2 reads here)
+                                           ! SU2 working dir = dirname(su2_restart_in)
     REAL(rk)           :: gamma_gas = -1.0_rk  ! ratio of specific heats
                                                ! (sentinel; must be set in &SU2)
     REAL(rk)           :: R_gas     = -1.0_rk  ! specific gas constant

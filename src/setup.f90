@@ -47,7 +47,7 @@ MODULE setup
     PUBLIC :: configurationRead, validate_paths, seed_stability_initial, &
               promote_to_initial_state, stability_time_dir, &
               stability_output_path, clear_endpoint_folder, &
-              find_endpoint_folder, get_unit, INT_TO_STR, time_to_str
+              find_endpoint_folder, su2_workdir, get_unit, INT_TO_STR, time_to_str
 
 CONTAINS
 
@@ -84,7 +84,6 @@ CONTAINS
         ! SU2-specific namelist
         NAMELIST / SU2 / su2_config_file, &
                          su2_restart_in, &
-                         su2_solution_out, &
                          gamma_gas, &
                          R_gas, &
                          stability_dir
@@ -218,13 +217,7 @@ CONTAINS
             IF (LEN_TRIM(su2_restart_in) == 0) THEN
                 ierr = ERR_SETUP_INVALID_PARAM
                 CALL log_error(ERR_SETUP_INVALID_PARAM, &
-                    'su2_restart_in must be a non-empty path')
-                RETURN
-            END IF
-            IF (LEN_TRIM(su2_solution_out) == 0) THEN
-                ierr = ERR_SETUP_INVALID_PARAM
-                CALL log_error(ERR_SETUP_INVALID_PARAM, &
-                    'su2_solution_out must be a non-empty path')
+                    'su2_restart_in must be the full path to solution_flow_00000.csv')
                 RETURN
             END IF
 
@@ -273,12 +266,12 @@ CONTAINS
                                    TSTEP_INITIAL_TIME+TTime, &
                                    '   (controlDict.endTime must match)'
         ELSE IF (TRIM(flow_format) == 'SU2') THEN
-            WRITE(*,'(A,A)')       '  su2_config_file  = ', TRIM(su2_config_file)
-            WRITE(*,'(A,A)')       '  su2_restart_in   = ', TRIM(su2_restart_in)
-            WRITE(*,'(A,A)')       '  su2_solution_out = ', TRIM(su2_solution_out)
-            WRITE(*,'(A,A)')       '  stability_dir    = ', TRIM(stability_dir)
-            WRITE(*,'(A,ES12.4)')  '  gamma_gas        = ', gamma_gas
-            WRITE(*,'(A,ES12.4)')  '  R_gas            = ', R_gas
+            WRITE(*,'(A,A)')       '  su2_config_file = ', TRIM(su2_config_file)
+            WRITE(*,'(A,A)')       '  su2_restart_in  = ', TRIM(su2_restart_in)
+            WRITE(*,'(A,A)')       '  su2_work_dir    = ', TRIM(su2_workdir())
+            WRITE(*,'(A,A)')       '  stability_dir   = ', TRIM(stability_dir)
+            WRITE(*,'(A,ES12.4)')  '  gamma_gas       = ', gamma_gas
+            WRITE(*,'(A,ES12.4)')  '  R_gas           = ', R_gas
         END IF
         WRITE(*,'(A)')         '---------------------------------------'
     END SUBROUTINE validate_paths
@@ -306,7 +299,6 @@ CONTAINS
         CHARACTER(len=512) :: cmd
         CHARACTER(len=256) :: init_dir
         INTEGER :: cmdstat, exitstat
-        LOGICAL :: src_exists
 
         ierr = 0
 
@@ -342,28 +334,10 @@ CONTAINS
             WRITE(*,'(A,A)') 'Seeded initial state: ', TRIM(init_dir)
 
         ELSE IF (TRIM(flow_format) == 'SU2') THEN
-            ! SU2: copy su2_solution_out -> su2_restart_in so the writer has
-            ! a real file whose header it can preserve.
-            INQUIRE(FILE=TRIM(su2_solution_out), EXIST=src_exists)
-            IF (src_exists) THEN
-                cmd = 'cp -pRf ' // TRIM(su2_solution_out) // ' ' // &
-                                    TRIM(su2_restart_in)
-                CALL EXECUTE_COMMAND_LINE(TRIM(cmd), wait=.TRUE., &
-                                          exitstat=exitstat, cmdstat=cmdstat)
-                IF (cmdstat /= 0 .OR. exitstat /= 0) THEN
-                    ierr = ERR_SETUP_FILE_OPEN
-                    CALL log_error(ERR_SETUP_FILE_OPEN, &
-                        'cp -pRf failed: '//TRIM(su2_solution_out)// &
-                        ' -> '//TRIM(su2_restart_in))
-                    RETURN
-                END IF
-                WRITE(*,'(A,A)') 'SU2 seeded restart_in from: ', &
-                    TRIM(su2_solution_out)
-            ELSE
-                WRITE(*,'(A)') 'WARNING: su2_solution_out does not exist yet.'
-                WRITE(*,'(A)') '  User must pre-seed su2_restart_in with a '// &
-                    'base-flow restart file: '//TRIM(su2_restart_in)
-            END IF
+            ! The SU2 folder is prepared by the user before TStep runs.
+            ! Nothing to do here: su2_restart_in (solution_flow_00000.csv)
+            ! will be written by write_SU2_restart at the start of each matvec.
+            WRITE(*,'(A,A)') 'SU2: user-managed folder at ', TRIM(su2_workdir())
         END IF
     END SUBROUTINE seed_stability_initial
 
@@ -427,20 +401,22 @@ CONTAINS
                                  ' -> ', TRIM(init_dir)
 
         ELSE IF (TRIM(flow_format) == 'SU2') THEN
-            ! SU2: copy su2_solution_out over su2_restart_in
-            cmd = 'cp -pRf ' // TRIM(su2_solution_out) // ' ' // &
-                                TRIM(su2_restart_in)
+            ! Find SU2's output file (restart_flow_*.csv), copy it back over
+            ! su2_restart_in (solution_flow_00000.csv) for the next matvec.
+            CALL find_endpoint_folder(end_dir, ierr)
+            IF (ierr /= 0) RETURN
+
+            cmd = 'cp -pRf ' // TRIM(end_dir) // ' ' // TRIM(su2_restart_in)
             CALL EXECUTE_COMMAND_LINE(TRIM(cmd), wait=.TRUE., &
                                       exitstat=exitstat, cmdstat=cmdstat)
             IF (cmdstat /= 0 .OR. exitstat /= 0) THEN
                 ierr = ERR_SETUP_FILE_OPEN
                 CALL log_error(ERR_SETUP_FILE_OPEN, &
-                    'cp -pRf failed: '//TRIM(su2_solution_out)// &
-                    ' -> '//TRIM(su2_restart_in))
+                    'cp -pRf failed: '//TRIM(end_dir)//' -> '//TRIM(su2_restart_in))
                 RETURN
             END IF
 
-            WRITE(*,'(A,A,A,A)') 'SU2 promoted: ', TRIM(su2_solution_out), &
+            WRITE(*,'(A,A,A,A)') 'SU2 promoted: ', TRIM(end_dir), &
                                  ' -> ', TRIM(su2_restart_in)
         END IF
     END SUBROUTINE promote_to_initial_state
@@ -495,9 +471,11 @@ CONTAINS
             CALL EXECUTE_COMMAND_LINE(TRIM(cmd), wait=.TRUE.)
 
         ELSE IF (TRIM(flow_format) == 'SU2') THEN
-            ! SU2: single static file -- just remove su2_solution_out.
-            CALL EXECUTE_COMMAND_LINE('rm -f '//TRIM(su2_solution_out), &
-                                      wait=.TRUE.)
+            ! Remove all restart_flow_*.csv from the SU2 working directory
+            ! so the next matvec's glob sees exactly one fresh output file.
+            CALL EXECUTE_COMMAND_LINE( &
+                'rm -f '//TRIM(su2_workdir())//'restart_flow_*.csv', &
+                wait=.TRUE.)
         END IF
     END SUBROUTINE clear_endpoint_folder
 
@@ -558,8 +536,32 @@ CONTAINS
             path = TRIM(stability_dir)//TRIM(folder_name)//'/'
 
         ELSE IF (TRIM(flow_format) == 'SU2') THEN
-            ! SU2: single static file -- no folder hunting needed.
-            path = TRIM(su2_solution_out)
+            ! Glob for the single restart_flow_*.csv that SU2 wrote.
+            ! sort picks the highest index (in case stale files slipped through).
+            tmpfile = TRIM(su2_workdir())//'tstep_su2_endpoint.txt'
+            cmd = 'ls -1 '//TRIM(su2_workdir())//'restart_flow_*.csv'// &
+                  ' 2>/dev/null | sort | tail -n 1 > '//TRIM(tmpfile)
+            CALL EXECUTE_COMMAND_LINE(TRIM(cmd), wait=.TRUE.)
+
+            CALL get_unit(u)
+            OPEN(u, file=TRIM(tmpfile), status='old', action='read', &
+                 iostat=io_stat)
+            IF (io_stat == 0) THEN
+                READ(u, '(A)', iostat=io_stat) folder_name
+                CLOSE(u)
+            END IF
+            CALL EXECUTE_COMMAND_LINE('rm -f '//TRIM(tmpfile), wait=.TRUE.)
+
+            IF (LEN_TRIM(folder_name) == 0) THEN
+                ierr = ERR_SETUP_INVALID_PARAM
+                CALL log_error(ERR_SETUP_INVALID_PARAM, &
+                    'find_endpoint_folder: no restart_flow_*.csv found in '// &
+                    TRIM(su2_workdir())// &
+                    ' (SU2 did not write output, or wrong working directory)')
+                RETURN
+            END IF
+
+            path = TRIM(folder_name)
         END IF
     END SUBROUTINE find_endpoint_folder
 
@@ -630,6 +632,28 @@ CONTAINS
 
 
 ! -------------------------------------------------------------------------
+    ! su2_workdir  --  derive the SU2 working directory from su2_restart_in
+    !                  by stripping the trailing filename.
+    !
+    ! e.g. su2_restart_in = '/path/to/SU2/solution_flow_00000.csv'
+    !      su2_workdir()  = '/path/to/SU2/'
+    !
+    ! Returns './' if su2_restart_in contains no '/' (bare filename).
+    ! -------------------------------------------------------------------------
+    PURE FUNCTION su2_workdir() RESULT(d)
+        CHARACTER(len=256) :: d
+        INTEGER            :: i
+        d = './'
+        DO i = LEN_TRIM(su2_restart_in), 1, -1
+            IF (su2_restart_in(i:i) == '/') THEN
+                d = su2_restart_in(1:i)
+                RETURN
+            END IF
+        END DO
+    END FUNCTION su2_workdir
+
+
+    ! -------------------------------------------------------------------------
     ! Helper subroutine to safely get an unused file unit number.
     ! -------------------------------------------------------------------------
     SUBROUTINE get_unit(u)
